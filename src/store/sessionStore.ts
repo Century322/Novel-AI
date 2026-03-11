@@ -18,6 +18,7 @@ interface SessionActions {
   addMessage: (role: 'user' | 'assistant' | 'reviewer' | 'system', content: string) => void;
   updateMessage: (id: string, content: string) => void;
   deleteMessage: (id: string) => void;
+  rollbackToMessage: (id: string) => void;
   updateLastMessage: (content: string) => void;
   getCurrentSession: () => ChatSession | undefined;
   clearCurrentSessionMessages: () => void;
@@ -139,6 +140,27 @@ export const useSessionStore = create<SessionStore>()(
               ? { ...session, messages: session.messages.filter((m) => m.id !== id) }
               : session
           ),
+        }));
+      },
+
+      rollbackToMessage: (id: string) => {
+        const { currentSessionId } = get();
+        if (!currentSessionId) return;
+
+        set((state) => ({
+          sessions: state.sessions.map((session) => {
+            if (session.id !== currentSessionId) return session;
+
+            const messageIndex = session.messages.findIndex((m) => m.id === id);
+            if (messageIndex === -1) return session;
+
+            const rolledBackMessages = session.messages.slice(0, messageIndex);
+
+            return {
+              ...session,
+              messages: rolledBackMessages,
+            };
+          }),
         }));
       },
 

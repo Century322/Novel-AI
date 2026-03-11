@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { createEncryptedStorage } from './encryptedStorage';
 import { fileSystemService, FileInfo } from '@/services/core/fileSystemService';
+import { useTabStore } from './tabStore';
 
 interface ProjectState {
   fileTree: FileInfo[];
@@ -96,6 +97,12 @@ export const useProjectStore = create<ProjectStore>()(
           await fileSystemService.deleteFile(path);
         }
         await get().refreshFileTree();
+
+        const tabStore = useTabStore.getState();
+        const tab = tabStore.getTabByFileId(path);
+        if (tab) {
+          tabStore.closeTab(tab.id);
+        }
       },
 
       renameFile: async (oldPath: string, newName: string) => {

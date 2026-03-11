@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, PersistStorage } from 'zustand/middleware';
 import { encryptValue, decryptValue } from '@/utils/encryption';
 import { AIProvider, PROVIDERS, ProviderConfig, ModelConfig } from '@/config/providers';
-import { validateApiKey } from '@/api/aiApi';
+import { validateApiKey, ApiKeyValidationResult } from '@/services/core/apiKeyValidation';
 
 export type { AIProvider } from '@/config/providers';
 export type { ModelConfig } from '@/config/providers';
@@ -171,7 +171,7 @@ export const useApiKeyStore = create<ApiKeyStore>()(
         }));
 
         try {
-          const result = await validateApiKey(key.provider, key.apiKey, key.baseUrl);
+          const result: ApiKeyValidationResult = await validateApiKey(key.provider, key.apiKey);
 
           if (result.valid) {
             set((state) => ({
@@ -183,6 +183,9 @@ export const useApiKeyStore = create<ApiKeyStore>()(
                       isValidating: false,
                       lastValidated: Date.now(),
                       error: undefined,
+                      models: result.models && result.models.length > 0 
+                        ? result.models.map(m => ({ id: m.id, name: m.name || m.id }))
+                        : k.models,
                     }
                   : k
               ),
@@ -203,7 +206,8 @@ export const useApiKeyStore = create<ApiKeyStore>()(
             }));
             return false;
           }
-        } catch {
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : '网络错误';
           set((state) => ({
             keys: state.keys.map((k) =>
               k.id === id
@@ -211,7 +215,7 @@ export const useApiKeyStore = create<ApiKeyStore>()(
                     ...k,
                     isValid: false,
                     isValidating: false,
-                    error: '网络错误',
+                    error: errorMessage,
                   }
                 : k
             ),

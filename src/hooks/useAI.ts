@@ -20,33 +20,20 @@ import type { ExtractionResult, ExtractedInfo } from '@/types/knowledge/extracti
 import type { Reminder, ReminderStats } from '@/types/writing/reminder';
 import type { StyleProfile } from '@/types/style/styleLearning';
 import type { ThinkingProcess } from '@/types/ai/thinkingProcess';
-import { createIntentUnderstandingService, IntentUnderstandingService } from '@/services/ai/intentUnderstandingService';
 import { infoExtractionService } from '@/services/analysis/infoExtractionService';
-import { QualityService } from '@/services/analysis/qualityService';
-import { KnowledgeService } from '@/services/knowledge/knowledgeService';
-import { createMemoryService, MemoryService } from '@/services/knowledge/memoryService';
-import {
-  createContextCompressionService,
-  ContextCompressionService,
-} from '@/services/knowledge/contextCompressionService';
-import { CharacterService } from '@/services/character/characterService';
-import { TimelineService } from '@/services/plot/timelineService';
-import { ForeshadowingService } from '@/services/plot/foreshadowingService';
-import {
-  createAuthorStyleLearningService,
-  AuthorStyleLearningService,
-} from '@/services/style/authorStyleLearningService';
-import { DeepStyleLearningService } from '@/services/style/deepStyleLearningService';
-import { ReminderService } from '@/services/writing/reminderService';
-import { createWorldModelService } from '@/services/world/worldModelService';
-import { createNovelBibleService, NovelBibleService } from '@/services/world/novelBibleService';
-import { SettingExtractionService } from '@/services/extraction/settingExtractionService';
-import { WorldBuildingService } from '@/services/worldbuilding/worldBuildingService';
-import { createToolRegistry, ToolRegistry } from '@/services/tools/toolRegistry';
-import { createAgentEngine, AgentEngine } from '@/services/ai/agentEngine';
 import { llmService } from '@/services/ai/llmService';
 import { logger } from '@/services/core/loggerService';
 import { thinkingProcessService } from '@/services/ai/thinkingProcessService';
+import {
+  initializeServices,
+  disposeServices,
+  getToolRegistry,
+  getAgentEngine,
+  getIntentService,
+  getDeepStyleService,
+  getReminderService,
+  getKnowledgeService,
+} from '@/services/core/serviceInitializer';
 
 interface FileOperation {
   path: string;
@@ -117,16 +104,6 @@ export function useAI() {
   const [thinkingProcess, setThinkingProcess] = useState<ThinkingProcess | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
-  const intentServiceRef = useRef<IntentUnderstandingService | null>(null);
-  const knowledgeServiceRef = useRef<KnowledgeService | null>(null);
-  const memoryServiceRef = useRef<MemoryService | null>(null);
-  const compressionServiceRef = useRef<ContextCompressionService | null>(null);
-  const styleServiceRef = useRef<AuthorStyleLearningService | null>(null);
-  const deepStyleServiceRef = useRef<DeepStyleLearningService | null>(null);
-  const reminderServiceRef = useRef<ReminderService | null>(null);
-  const novelBibleServiceRef = useRef<NovelBibleService | null>(null);
-  const toolRegistryRef = useRef<ToolRegistry | null>(null);
-  const agentEngineRef = useRef<AgentEngine | null>(null);
 
   useEffect(() => {
     const unsubscribe = thinkingProcessService.subscribe((process) => {
@@ -142,117 +119,27 @@ export function useAI() {
   useEffect(() => {
     let disposed = false;
 
-    const initializeProjectServices = async () => {
+    const initServices = async () => {
       if (!projectPath) {
-        intentServiceRef.current = null;
-        knowledgeServiceRef.current = null;
-        memoryServiceRef.current = null;
-        compressionServiceRef.current = null;
-        styleServiceRef.current = null;
-        deepStyleServiceRef.current = null;
-        reminderServiceRef.current = null;
-        novelBibleServiceRef.current = null;
-        toolRegistryRef.current = null;
-        agentEngineRef.current = null;
+        await disposeServices();
         return;
       }
 
-      intentServiceRef.current = createIntentUnderstandingService(projectPath);
-
-      const knowledgeService = new KnowledgeService();
-      const memoryService = createMemoryService(projectPath);
-      const compressionService = createContextCompressionService(projectPath);
-      const styleService = createAuthorStyleLearningService(projectPath);
-      const deepStyleService = new DeepStyleLearningService(projectPath);
-      const reminderService = new ReminderService(projectPath);
-      const qualityService = new QualityService(projectPath);
-      const characterService = new CharacterService(projectPath);
-      const timelineService = new TimelineService(projectPath);
-      const foreshadowingService = new ForeshadowingService(projectPath);
-      const worldModelService = createWorldModelService(projectPath);
-      const novelBibleService = createNovelBibleService(projectPath);
-      const settingExtractionService = new SettingExtractionService();
-      const worldBuildingService = new WorldBuildingService();
-      const toolRegistry = createToolRegistry(projectPath);
-      const agentEngine = createAgentEngine(projectPath, {
-        maxIterations: Math.max(1, agentConfig.maxIterations || 1),
+      await initializeServices(projectPath, {
+        maxIterations: agentConfig.maxIterations || 1,
         agentMode: true,
       });
 
-      try {
-        await knowledgeService.initialize();
-      } catch (err) {
-        logger.error('Knowledge service init failed', { error: err });
-      }
-
-      try {
-        await memoryService.initialize();
-      } catch (err) {
-        logger.error('Memory service init failed', { error: err });
-      }
-
-      try {
-        await styleService.initialize();
-      } catch (err) {
-        logger.error('Style service init failed', { error: err });
-      }
-
-      try {
-        await worldModelService.initialize();
-      } catch (err) {
-        logger.error('World model service init failed', { error: err });
-      }
-
-      novelBibleService.setWorldModelService(worldModelService);
-      try {
-        await novelBibleService.initialize();
-      } catch (err) {
-        logger.error('Novel bible service init failed', { error: err });
-      }
-
-      compressionService.setMemoryService(memoryService);
-      compressionService.setKnowledgeService(knowledgeService);
-
-      settingExtractionService.setWorldModelService(worldModelService);
-      worldBuildingService.setWorldModelService(worldModelService);
-      worldBuildingService.setExtractionService(settingExtractionService);
-
-      toolRegistry.setKnowledgeService(knowledgeService);
-      toolRegistry.setMemoryService(memoryService);
-      toolRegistry.setCompressionService(compressionService);
-      toolRegistry.setStyleService(styleService);
-      toolRegistry.setQualityService(qualityService);
-      toolRegistry.setCharacterService(characterService);
-      toolRegistry.setTimelineService(timelineService);
-      toolRegistry.setForeshadowingService(foreshadowingService);
-      toolRegistry.setWorldModelService(worldModelService);
-      toolRegistry.setSettingExtractionService(settingExtractionService);
-      toolRegistry.setWorldBuildingService(worldBuildingService);
-      toolRegistry.setNovelBibleService(novelBibleService);
-
-      agentEngine.setMemoryService(memoryService);
-      agentEngine.setCompressionService(compressionService);
-      agentEngine.setStyleService(styleService);
-
       if (disposed) {
-        return;
+        await disposeServices();
       }
-
-      knowledgeServiceRef.current = knowledgeService;
-      memoryServiceRef.current = memoryService;
-      compressionServiceRef.current = compressionService;
-      styleServiceRef.current = styleService;
-      deepStyleServiceRef.current = deepStyleService;
-      reminderServiceRef.current = reminderService;
-      novelBibleServiceRef.current = novelBibleService;
-      toolRegistryRef.current = toolRegistry;
-      agentEngineRef.current = agentEngine;
     };
 
-    initializeProjectServices();
+    initServices();
 
     return () => {
       disposed = true;
+      disposeServices();
     };
   }, [agentConfig.maxIterations, projectPath]);
 
@@ -332,7 +219,8 @@ export function useAI() {
 
   const analyzeIntent = useCallback(
     async (userMsg: string, history: Message[]): Promise<IntentResult> => {
-      if (!intentServiceRef.current || !projectPath) {
+      const intentService = getIntentService();
+      if (!intentService || !projectPath) {
         const fallback = createFallbackIntent(userMsg);
         setCurrentIntent(fallback);
         return fallback;
@@ -351,7 +239,7 @@ export function useAI() {
       };
 
       try {
-        const result = await intentServiceRef.current.analyzeIntent(userMsg, context);
+        const result = await intentService.analyzeIntent(userMsg, context);
         setCurrentIntent(result);
         return result;
       } catch (err) {
@@ -440,7 +328,7 @@ export function useAI() {
       try {
         await analyzeIntent(userMsg, history);
 
-        const engine = agentEngineRef.current;
+        const engine = getAgentEngine();
         if (!engine || !projectPath) {
           const responseText = await callAI(userMsg, history);
           const fallbackText = await parseAndCreateFiles(responseText);
@@ -514,11 +402,12 @@ export function useAI() {
 
   const executeTool = useCallback(
     async (name: string, args: Record<string, unknown>) => {
-      if (!projectPath || !toolRegistryRef.current) {
+      const registry = getToolRegistry();
+      if (!projectPath || !registry) {
         return 'Tool registry is unavailable. Open a project first.';
       }
 
-      const result = await toolRegistryRef.current.execute(
+      const result = await registry.execute(
         {
           id: `call_${Date.now()}`,
           name,
@@ -543,7 +432,7 @@ export function useAI() {
   );
 
   const getAvailableTools = useCallback(() => {
-    const registry = toolRegistryRef.current;
+    const registry = getToolRegistry();
     if (!registry) {
       return [] as Array<{ name: string; description: string }>;
     }
@@ -648,7 +537,7 @@ export function useAI() {
   );
 
   const analyzeStyle = useCallback(async (text: string, source: string = 'user_input') => {
-    const service = deepStyleServiceRef.current;
+    const service = getDeepStyleService();
     if (!service) {
       return null as StyleProfile | null;
     }
@@ -662,7 +551,7 @@ export function useAI() {
   }, []);
 
   const getStyleProfiles = useCallback(() => {
-    const service = deepStyleServiceRef.current;
+    const service = getDeepStyleService();
     if (!service) {
       return [] as StyleProfile[];
     }
@@ -671,7 +560,7 @@ export function useAI() {
 
   const applyStyle = useCallback(
     async (content: string, profileId: string) => {
-      const service = deepStyleServiceRef.current;
+      const service = getDeepStyleService();
       if (!service) {
         return null as { appliedPatterns: string[]; modifications: string[] } | null;
       }
@@ -691,17 +580,17 @@ export function useAI() {
   );
 
   const getPendingReminders = useCallback(() => {
-    const service = reminderServiceRef.current;
+    const service = getReminderService();
     return service ? service.getPendingReminders() : ([] as Reminder[]);
   }, []);
 
   const getReminderStats = useCallback(() => {
-    const service = reminderServiceRef.current;
+    const service = getReminderService();
     return service ? service.getStats() : (null as ReminderStats | null);
   }, []);
 
   const acknowledgeReminder = useCallback(async (id: string) => {
-    const service = reminderServiceRef.current;
+    const service = getReminderService();
     if (!service) {
       return false;
     }
@@ -709,7 +598,7 @@ export function useAI() {
   }, []);
 
   const resolveReminder = useCallback(async (id: string) => {
-    const service = reminderServiceRef.current;
+    const service = getReminderService();
     if (!service) {
       return false;
     }
@@ -717,7 +606,7 @@ export function useAI() {
   }, []);
 
   const runReminderChecks = useCallback(async () => {
-    const service = reminderServiceRef.current;
+    const service = getReminderService();
     if (!service) {
       return [] as Reminder[];
     }
@@ -738,7 +627,7 @@ export function useAI() {
         | 'chapter'
         | 'custom' = 'reference'
     ): Promise<{ success: boolean; file?: unknown; error?: string }> => {
-      const service = knowledgeServiceRef.current;
+      const service = getKnowledgeService();
       if (!service) {
         return { success: false, error: 'Knowledge service is not initialized.' };
       }
@@ -766,7 +655,7 @@ export function useAI() {
   );
 
   const removeKnowledgeFile = useCallback(async (fileId: string): Promise<boolean> => {
-    const service = knowledgeServiceRef.current;
+    const service = getKnowledgeService();
     if (!service) {
       return false;
     }
@@ -780,12 +669,12 @@ export function useAI() {
   }, []);
 
   const getKnowledgeFiles = useCallback(() => {
-    const service = knowledgeServiceRef.current;
+    const service = getKnowledgeService();
     return service ? service.getAllFiles() : [];
   }, []);
 
   const getKnowledgeStats = useCallback(() => {
-    const service = knowledgeServiceRef.current;
+    const service = getKnowledgeService();
     return (
       service?.getStats() || {
         totalFiles: 0,
@@ -797,7 +686,7 @@ export function useAI() {
   }, []);
 
   const searchKnowledge = useCallback((query: string, limit: number = 10) => {
-    const service = knowledgeServiceRef.current;
+    const service = getKnowledgeService();
     if (!service) {
       return [];
     }
@@ -809,7 +698,7 @@ export function useAI() {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
-    agentEngineRef.current?.cancel();
+    getAgentEngine()?.cancel();
 
     setProcessing(false);
     clearCurrentAction();
@@ -819,6 +708,14 @@ export function useAI() {
 
     addMessage('system', 'Generation aborted.');
   }, [addMessage, clearCurrentAction, setProcessing]);
+
+  const resetAIState = useCallback(() => {
+    setAgentState(null);
+    setCurrentIntent(null);
+    thinkingProcessService.clear();
+    setProcessing(false);
+    clearCurrentAction();
+  }, [clearCurrentAction, setProcessing]);
 
   return {
     sendMessage,
@@ -851,5 +748,6 @@ export function useAI() {
     getKnowledgeStats,
     searchKnowledge,
     thinkingProcess,
+    resetAIState,
   };
 }

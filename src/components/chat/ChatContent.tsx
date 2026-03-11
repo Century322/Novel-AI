@@ -25,6 +25,7 @@ import {
   PanelLeft,
   ChevronRight,
   Check,
+  Undo2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ModelSelector } from '@/components/settings/ModelSelector';
@@ -72,7 +73,7 @@ export const ChatContent: React.FC<ChatContentProps> = ({
   onOpenSettings,
   isMobile = false,
 }) => {
-  const { currentSessionId, createSession } = useSessionStore();
+  const { currentSessionId, createSession, rollbackToMessage } = useSessionStore();
   const agentStore = useAgentStore();
   const { isInitialized, init } = useWorkshopStore();
   const { tasks } = useTaskStore();
@@ -105,6 +106,7 @@ export const ChatContent: React.FC<ChatContentProps> = ({
     extractAndSaveInfo,
     abort,
     thinkingProcess,
+    resetAIState,
   } = useAI();
 
   const isProcessing = aiProcessing || agentStore.isProcessing;
@@ -304,50 +306,6 @@ export const ChatContent: React.FC<ChatContentProps> = ({
       e.preventDefault();
       handleSend();
     }
-  };
-
-  const getAgentStatusText = () => {
-    if (!agentState) {
-      return null;
-    }
-
-    switch (agentState.status) {
-      case 'planning':
-        return '📋 规划任务...';
-      case 'thinking':
-        return '🤔 思考中...';
-      case 'acting':
-        return `🔧 执行: ${agentState.currentAction?.toolName || '工具'}`;
-      case 'observing':
-        return '👁️ 观察结果...';
-      case 'responding':
-        return '✍️ 写作中...';
-      case 'completed':
-        return '✅ 完成';
-      case 'error':
-        return '❌ 执行出错';
-      case 'paused':
-        return '⏸️ 已暂停';
-      default:
-        return null;
-    }
-  };
-
-  const getProcessingStatusText = () => {
-    if (thinkingProcess) {
-      const current = thinkingProcess.steps[thinkingProcess.currentStepIndex];
-      if (current && current.status === 'running') {
-        return current.title;
-      }
-    }
-    if (agentState) {
-      return getAgentStatusText();
-    }
-    const { currentAction } = useAgentStore.getState();
-    if (currentAction.type !== 'idle' && currentAction.description) {
-      return currentAction.description;
-    }
-    return '处理中...';
   };
 
   const toggleMessageExpand = (msgId: string) => {
@@ -561,47 +519,6 @@ export const ChatContent: React.FC<ChatContentProps> = ({
           </div>
         )}
 
-        {currentIntent && isProcessing && (
-          <div className="mb-3 p-2 rounded-lg text-xs bg-purple-500/10 text-purple-400">
-            <div className="flex items-center gap-2">
-              <span className="font-medium">🎯 意图识别</span>
-              <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-500/20">
-                {currentIntent.category}
-              </span>
-              <span className="opacity-70">{currentIntent.specificIntent}</span>
-              <span
-                className={cn(
-                  'ml-auto text-[10px]',
-                  currentIntent.confidence > 0.8
-                    ? 'text-green-500'
-                    : currentIntent.confidence > 0.5
-                      ? 'text-yellow-500'
-                      : 'text-red-500'
-                )}
-              >
-                {Math.round(currentIntent.confidence * 100)}%
-              </span>
-            </div>
-            {currentIntent.tools.length > 0 && (
-              <div className="mt-1 flex items-center gap-1 opacity-70">
-                <span>工具:</span>
-                {currentIntent.tools.map((t, i) => (
-                  <span key={i} className="px-1 rounded bg-purple-500/20">
-                    {t.toolName}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {agentState && isProcessing && (
-          <div className="mb-3 p-2 rounded-lg text-xs flex items-center gap-2 bg-blue-500/10 text-blue-400">
-            <Loader2 size={12} className="animate-spin" />
-            <span>{getAgentStatusText()}</span>
-          </div>
-        )}
-
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-sm gap-4">
             <div className="text-center text-zinc-500">
@@ -621,7 +538,30 @@ export const ChatContent: React.FC<ChatContentProps> = ({
 
               if (msg.role === 'user') {
                 return (
-                  <div key={msg.id} className="flex justify-end">
+                  <div key={msg.id} className="flex justify-end items-start gap-2 group">
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity pt-1 max-sm:opacity-100">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(msg.content);
+                        }}
+                        className="p-1 rounded hover:bg-white/10 text-zinc-500 hover:text-zinc-300 transition-colors"
+                        title="复制"
+                      >
+                        <Copy size={12} />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          resetAIState();
+                          rollbackToMessage(msg.id);
+                        }}
+                        className="p-1 rounded hover:bg-red-500/20 text-zinc-500 hover:text-red-400 transition-colors"
+                        title="回退到此处"
+                      >
+                        <Undo2 size={12} />
+                      </button>
+                    </div>
                     <div className="text-[13px] px-3 py-1.5 rounded-lg max-w-[70%] bg-zinc-700 text-zinc-100">
                       <div className="whitespace-pre-wrap">{msg.content}</div>
                     </div>
@@ -775,22 +715,15 @@ export const ChatContent: React.FC<ChatContentProps> = ({
               );
             })}
 
-            {thinkingProcess && isProcessing && (
+            {(thinkingProcess || currentIntent || agentState) && isProcessing && (
               <div className="mb-3">
                 <ThinkingProcessViewer
                   process={thinkingProcess}
                   expanded={thinkingExpanded}
                   onToggleExpand={() => setThinkingExpanded(!thinkingExpanded)}
+                  intent={currentIntent}
+                  agentState={agentState}
                 />
-              </div>
-            )}
-
-            {!thinkingProcess && isProcessing && (
-              <div className="mb-3 p-3 rounded-lg border border-white/10 bg-zinc-900/50">
-                <div className="flex items-center gap-2 text-xs text-zinc-400">
-                  <Loader2 size={12} className="animate-spin" />
-                  <span>{getProcessingStatusText()}</span>
-                </div>
               </div>
             )}
           </div>
@@ -863,12 +796,6 @@ export const ChatContent: React.FC<ChatContentProps> = ({
                 </div>
               )}
             </div>
-            {isProcessing && (
-              <span className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] bg-blue-500/20 text-blue-400 shrink-0">
-                <Loader2 size={10} className="animate-spin" />
-                {getProcessingStatusText()}
-              </span>
-            )}
             <div className="flex items-center gap-2 ml-auto">
               <button
                 onClick={toggleRecording}

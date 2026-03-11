@@ -6,6 +6,7 @@ import { MemoryService, SearchEngine } from '@/services/knowledge/memoryService'
 import { KnowledgeService } from '@/services/knowledge/knowledgeService';
 import { useFileTreeFromProject } from '@/store/fileStore';
 import { logger } from '@/services/core/loggerService';
+import { fileSystemService } from '@/services/core/fileSystemService';
 
 let knowledgeServiceInstance: KnowledgeService | null = null;
 const memoryServiceCache = new Map<string, MemoryService>();
@@ -37,13 +38,13 @@ function getSearchEngine(projectPath: string): SearchEngine {
 export function useSystemContext() {
   const { ragEnabled } = useUIStore();
   const { generateAllPrompts } = useSkillStore();
-  const { currentProject, fileTree } = useProjectStore();
-  const { selectedFilePath } = useFileStore();
+  const { fileTree } = useProjectStore();
+  const { selectedFilePath, rootPath } = useFileStore();
   const fileNodes = useFileTreeFromProject();
   const lastFileTreeRef = useRef<string>('');
   const initializedRef = useRef<string | null>(null);
 
-  const projectPath = currentProject?.path || null;
+  const projectPath = rootPath || null;
 
   useEffect(() => {
     if (!ragEnabled || !projectPath) {
@@ -86,8 +87,8 @@ export function useSystemContext() {
       context += skillPrompts;
     }
 
-    if (currentProject) {
-      context += `\n\n【当前项目: ${currentProject.name}】\n`;
+    if (projectPath) {
+      context += `\n\n【当前项目: ${fileSystemService.getProjectName()}】\n`;
       context += getFileStructure(fileNodes);
     } else {
       context += '\n\n【当前项目文件结构】\n(请先打开一个项目文件夹)\n';
@@ -112,7 +113,7 @@ export function useSystemContext() {
     context += '\n\n(你可以读取以上文件的内容来保持剧情连贯性)\n';
 
     return context;
-  }, [currentProject, fileNodes, selectedFilePath, generateAllPrompts, ragEnabled, projectPath]);
+  }, [projectPath, fileNodes, selectedFilePath, generateAllPrompts, ragEnabled]);
 }
 
 export function useKnowledgeService() {
@@ -120,23 +121,21 @@ export function useKnowledgeService() {
 }
 
 export function useMemoryService() {
-  const { currentProject } = useProjectStore();
-  const projectPath = currentProject?.path;
+  const { rootPath } = useFileStore();
 
-  if (!projectPath) {
+  if (!rootPath) {
     return null;
   }
-  return getMemoryService(projectPath);
+  return getMemoryService(rootPath);
 }
 
 export function useSearchEngine() {
-  const { currentProject } = useProjectStore();
-  const projectPath = currentProject?.path;
+  const { rootPath } = useFileStore();
 
-  if (!projectPath) {
+  if (!rootPath) {
     return null;
   }
-  return getSearchEngine(projectPath);
+  return getSearchEngine(rootPath);
 }
 
 export function useCurrentSession() {
@@ -145,6 +144,8 @@ export function useCurrentSession() {
 }
 
 export function useMessages() {
-  const currentSession = useCurrentSession();
+  const sessions = useSessionStore((state) => state.sessions);
+  const currentSessionId = useSessionStore((state) => state.currentSessionId);
+  const currentSession = sessions.find((s) => s.id === currentSessionId);
   return currentSession?.messages || [];
 }
