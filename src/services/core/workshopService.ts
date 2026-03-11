@@ -406,11 +406,13 @@ export const workshopService = {
     await fileSystemService.createDirectory(normalizePath(path));
   },
 
-  async readDirectory(path: string): Promise<Array<{ name: string; isDirectory: boolean }>> {
+  async readDirectory(path: string): Promise<Array<{ name: string; path: string; isDirectory: boolean; children?: unknown[] | null }>> {
     const entries = await fileSystemService.readDirectory(normalizePath(path));
     return entries.map((e) => ({
       name: e.name,
+      path: e.path,
       isDirectory: e.is_dir,
+      children: e.children,
     }));
   },
 };

@@ -75,9 +75,6 @@ export const SessionListPanel: React.FC<SessionListPanelProps> = ({ isOpen, onOp
     skills: skillFiles,
     init: initSkillStore,
     createSkill,
-    addKnowledgeFile,
-    removeKnowledgeFile,
-    knowledgeFiles: skillKnowledgeFiles,
     runAnalysis,
   } = useSkillStore();
 
@@ -117,9 +114,12 @@ export const SessionListPanel: React.FC<SessionListPanelProps> = ({ isOpen, onOp
 
     for (const file of Array.from(files)) {
       try {
-        const knowledgeFile = await addKnowledgeFile(file.name, 'reference');
-        if (knowledgeFile && knowledgeService) {
-          await knowledgeService.addFile(file.name, 'reference');
+        const content = await file.text();
+        if (knowledgeService) {
+          const result = await knowledgeService.addFile(file.name, 'reference', content);
+          if (result) {
+            console.log('上传成功:', result.filename, '分块数:', result.chunkCount);
+          }
         }
       } catch (err) {
         console.error('上传文件失败:', err);
@@ -309,31 +309,25 @@ export const SessionListPanel: React.FC<SessionListPanelProps> = ({ isOpen, onOp
           isMobile={isMobile}
         >
           <div className={cn("space-y-1", isMobile ? "px-3" : "px-2")}>
-            {skillKnowledgeFiles.length === 0 ? (
-              <div className={cn("text-zinc-500 px-1 py-1", isMobile ? "text-sm" : "text-[10px]")}>暂无资料</div>
-            ) : (
-              skillKnowledgeFiles.slice(0, 5).map((file) => (
+            {(() => {
+              const knowledgeFiles = knowledgeService?.getAllFiles() || [];
+              if (knowledgeFiles.length === 0) {
+                return <div className={cn("text-zinc-500 px-1 py-1", isMobile ? "text-sm" : "text-[10px]")}>暂无资料</div>;
+              }
+              return knowledgeFiles.slice(0, 5).map((file) => (
                 <div
-                  key={file.path}
+                  key={file.id}
                   className={cn(
                     "truncate hover:text-zinc-300 cursor-pointer flex items-center justify-between group",
                     isMobile ? "text-sm px-3 py-3" : "text-[10px] px-1 py-1"
                   )}
-                  title={file.name}
+                  title={file.filename}
                 >
-                  <span className="truncate flex-1">{file.name}</span>
-                  <button
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      await removeKnowledgeFile(file.path);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-red-400"
-                  >
-                    <X size={isMobile ? 14 : 8} />
-                  </button>
+                  <span className="truncate flex-1">{file.filename}</span>
+                  <span className="text-zinc-600 ml-1">({file.chunkCount}块)</span>
                 </div>
-              ))
-            )}
+              ));
+            })()}
             <input
               ref={fileInputRef}
               type="file"

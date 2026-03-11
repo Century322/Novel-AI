@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createAgentEngine, AgentEngine, AgentState } from '@/services/ai/agentEngine';
+import { getAgentEngine } from '@/services/core/serviceInitializer';
 import {
   Send,
   Loader2,
@@ -86,7 +87,12 @@ export const WritingAssistantPanel: React.FC<WritingAssistantPanelProps> = ({
 
   useEffect(() => {
     if (!agentRef.current) {
-      agentRef.current = createAgentEngine('');
+      const engine = getAgentEngine();
+      if (engine) {
+        agentRef.current = engine;
+      } else {
+        agentRef.current = createAgentEngine('');
+      }
     }
   }, []);
 
@@ -114,11 +120,10 @@ export const WritingAssistantPanel: React.FC<WritingAssistantPanelProps> = ({
     setStreamingContent('');
 
     try {
-      if (!agentRef.current) {
-        agentRef.current = createAgentEngine('');
-      }
+      const engine = getAgentEngine() || agentRef.current || createAgentEngine('');
+      agentRef.current = engine;
 
-      const result = await agentRef.current.run(userMessage, (state) => {
+      const result = await engine.run(userMessage, (state) => {
         setAgentState(state);
       });
 

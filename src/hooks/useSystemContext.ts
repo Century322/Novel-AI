@@ -1,35 +1,43 @@
 import { useMemo, useEffect, useRef } from 'react';
-import { useSessionStore, useFileStore, useUIStore, useSkillStore, useProjectStore } from '@/store';
+import { useSessionStore, useFileStore, useUIStore, useSkillStore, useWorkshopStore } from '@/store';
 import { SYSTEM_PROMPT_TEMPLATE } from '@/constants';
 import { getFileStructure, findNode } from '@/utils';
 import { MemoryService, SearchEngine } from '@/services/knowledge/memoryService';
-import { KnowledgeService } from '@/services/knowledge/knowledgeService';
 import { useFileTreeFromProject } from '@/store/fileStore';
 import { logger } from '@/services/core/loggerService';
 import { fileSystemService } from '@/services/core/fileSystemService';
+import {
+  getKnowledgeService as getGlobalKnowledgeService,
+  getMemoryService as getGlobalMemoryService,
+} from '@/services/core/serviceInitializer';
 
-let knowledgeServiceInstance: KnowledgeService | null = null;
 const memoryServiceCache = new Map<string, MemoryService>();
 const searchEngineCache = new Map<string, SearchEngine>();
 
-function getKnowledgeService(): KnowledgeService {
-  if (!knowledgeServiceInstance) {
-    knowledgeServiceInstance = new KnowledgeService();
-  }
-  return knowledgeServiceInstance;
+function getKnowledgeService() {
+  return getGlobalKnowledgeService();
 }
 
-function getMemoryService(projectPath: string): MemoryService {
+function getMemoryService(projectPath: string): MemoryService | null {
+  const globalService = getGlobalMemoryService();
+  if (globalService) return globalService;
+  
   if (!memoryServiceCache.has(projectPath)) {
+    const { MemoryService } = require('@/services/knowledge/memoryService');
     memoryServiceCache.set(projectPath, new MemoryService(projectPath));
   }
   return memoryServiceCache.get(projectPath)!;
 }
 
-function getSearchEngine(projectPath: string): SearchEngine {
+function getSearchEngine(projectPath: string): SearchEngine | null {
+  const knowledgeService = getKnowledgeService();
+  const memoryService = getMemoryService(projectPath);
+  
+  if (!knowledgeService || !memoryService) {
+    return null;
+  }
+  
   if (!searchEngineCache.has(projectPath)) {
-    const knowledgeService = getKnowledgeService();
-    const memoryService = getMemoryService(projectPath);
     searchEngineCache.set(projectPath, new SearchEngine(knowledgeService, memoryService));
   }
   return searchEngineCache.get(projectPath)!;
@@ -38,37 +46,37 @@ function getSearchEngine(projectPath: string): SearchEngine {
 export function useSystemContext() {
   const { ragEnabled } = useUIStore();
   const { generateAllPrompts } = useSkillStore();
-  const { fileTree } = useProjectStore();
-  const { selectedFilePath, rootPath } = useFileStore();
+  const { selectedFilePath } = useFileStore();
+  const { projectPath } = useWorkshopStore();
   const fileNodes = useFileTreeFromProject();
-  const lastFileTreeRef = useRef<string>('');
-  const initializedRef = useRef<string | null>(null);
-
-  const projectPath = rootPath || null;
+  const initializedRef = useRef(false);
 
   useEffect(() => {
-    if (!ragEnabled || !projectPath) {
+    if (!ragEnabled) {
       return;
     }
-    if (initializedRef.current === projectPath) {
+    if (initializedRef.current) {
       return;
     }
 
-    initializedRef.current = projectPath;
-
-    const currentFT = JSON.stringify(fileTree.map((f) => f.path));
-    if (currentFT === lastFileTreeRef.current) {
-      return;
-    }
-    lastFileTreeRef.current = currentFT;
+    initializedRef.current = true;
 
     const knowledgeService = getKnowledgeService();
-    const memoryService = getMemoryService(projectPath);
+    if (knowledgeService) {
+      knowledgeService.initialize().catch((error) =>
+        logger.error('初始化知识服务失败', { error })
+      );
+    }
 
-    Promise.all([knowledgeService.initialize(), memoryService.initialize()]).catch((error) =>
-      logger.error('初始化服务失败', { error })
-    );
-  }, [fileTree, ragEnabled, projectPath]);
+    if (projectPath) {
+      const memoryService = getMemoryService(projectPath);
+      if (memoryService) {
+        memoryService.initialize().catch((error) =>
+          logger.error('初始化记忆服务失败', { error })
+        );
+      }
+    }
+  }, [ragEnabled, projectPath]);
 
   useEffect(() => {
     return () => {
@@ -84,14 +92,13 @@ export function useSystemContext() {
 
     const skillPrompts = generateAllPrompts();
     if (skillPrompts) {
+      context += '\n\n【当前激活的技能模板】\n';
       context += skillPrompts;
     }
 
     if (projectPath) {
       context += `\n\n【当前项目: ${fileSystemService.getProjectName()}】\n`;
       context += getFileStructure(fileNodes);
-    } else {
-      context += '\n\n【当前项目文件结构】\n(请先打开一个项目文件夹)\n';
     }
 
     if (selectedFilePath) {
@@ -104,11 +111,34 @@ export function useSystemContext() {
 
     if (ragEnabled && projectPath) {
       const memoryService = getMemoryService(projectPath);
-      const projectSummary = memoryService.getProjectSummary();
-      if (projectSummary && projectSummary !== '# 项目记忆摘要\n\n') {
-        context += `\n\n【项目记忆】\n${projectSummary}`;
+      if (memoryService) {
+        const projectSummary = memoryService.getProjectSummary();
+        if (projectSummary && projectSummary !== '# 项目记忆摘要\n\n') {
+          context += `\n\n【项目记忆】\n${projectSummary}`;
+        }
       }
     }
+
+    const knowledgeService = getKnowledgeService();
+    if (knowledgeService) {
+      const files = knowledgeService.getAllFiles();
+      if (files.length > 0) {
+        context += `\n\n【资料库】\n当前资料库中有 ${files.length} 个文件：\n`;
+        for (const file of files.slice(0, 10)) {
+          context += `- ${file.filename} (${file.type}, ${file.chunkCount}个分块)\n`;
+        }
+        if (files.length > 10) {
+          context += `... 还有 ${files.length - 10} 个文件\n`;
+        }
+        context += '\n【读取资料库内容的方法】\n';
+        context += '使用工具: get_knowledge_content({"filename": "文件名"})\n';
+        context += '使用工具: search_knowledge({"query": "关键词"})\n';
+        context += '\n【重要】学习写作风格时，必须使用 get_knowledge_content 获取完整内容！\n';
+      }
+    }
+
+    context += '\n\n【读取文件树文件的方法】\n';
+    context += '使用工具: read_file({"path": "文件路径"})\n';
 
     context += '\n\n(你可以读取以上文件的内容来保持剧情连贯性)\n';
 
@@ -121,21 +151,21 @@ export function useKnowledgeService() {
 }
 
 export function useMemoryService() {
-  const { rootPath } = useFileStore();
+  const { projectPath } = useWorkshopStore();
 
-  if (!rootPath) {
+  if (!projectPath) {
     return null;
   }
-  return getMemoryService(rootPath);
+  return getMemoryService(projectPath);
 }
 
 export function useSearchEngine() {
-  const { rootPath } = useFileStore();
+  const { projectPath } = useWorkshopStore();
 
-  if (!rootPath) {
+  if (!projectPath) {
     return null;
   }
-  return getSearchEngine(rootPath);
+  return getSearchEngine(projectPath);
 }
 
 export function useCurrentSession() {

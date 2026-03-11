@@ -66,16 +66,20 @@ export class KnowledgeService {
   async addFile(
     sourcePath: string,
     type: KnowledgeFile['type'],
+    content?: string,
     options: Partial<IndexingOptions> = {}
   ): Promise<KnowledgeFile | null> {
     const opts = { ...DEFAULT_INDEXING_OPTIONS, ...options };
 
     try {
-      const content = await workshopService.readFile(sourcePath);
+      let fileContent = content;
+      if (!fileContent) {
+        fileContent = await workshopService.readFile(sourcePath);
+      }
       const filename = sourcePath.split('/').pop() || 'unknown';
 
       const fileId = generateId();
-      const chunks = this.chunkContent(content, opts.chunkSize, opts.chunkOverlap);
+      const chunks = this.chunkContent(fileContent, opts.chunkSize, opts.chunkOverlap);
 
       const knowledgeChunks: KnowledgeChunk[] = chunks.map((chunk, index) => ({
         id: `${fileId}_${index}`,
@@ -91,7 +95,7 @@ export class KnowledgeService {
         filename,
         path: sourcePath,
         type,
-        size: content.length,
+        size: fileContent.length,
         chunkCount: knowledgeChunks.length,
         totalTokens: knowledgeChunks.reduce((sum, c) => sum + c.tokens, 0),
         indexedAt: Date.now(),

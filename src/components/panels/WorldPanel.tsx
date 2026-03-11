@@ -13,7 +13,6 @@ import {
 import { useWorkshopStore } from '@/store/workshopStore';
 import { createWorldModelService, WorldModelService } from '@/services/world/worldModelService';
 import { logger } from '@/services/core/loggerService';
-import { fileSystemService } from '@/services/core/fileSystemService';
 import type { WorldModel, WorldLocation, WorldFaction, WorldRule } from '@/types/world/worldModel';
 import type { CharacterProfile } from '@/types/character/characterProfile';
 import type { Foreshadowing } from '@/types/plot/foreshadowing';
@@ -30,26 +29,12 @@ export const WorldPanel: React.FC = () => {
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (!projectPath || !isInitialized) {
-      setWorldModelService(null);
-      setWorldModel(null);
-      setIsLoading(false);
-      setError(null);
-      return;
-    }
-
     const initService = async () => {
-      if (!fileSystemService.hasOpenProject()) {
-        setError('请点击"打开项目"按钮选择项目文件夹');
-        setIsLoading(false);
-        return;
-      }
-
       setIsLoading(true);
       setError(null);
 
       try {
-        const service = createWorldModelService(projectPath);
+        const service = createWorldModelService(projectPath || '');
         await service.initialize();
         setWorldModelService(service);
         setWorldModel(service.getWorldModel());
@@ -82,21 +67,30 @@ export const WorldPanel: React.FC = () => {
     });
   };
 
-  if (!projectPath) {
+  if (isLoading) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 gap-2">
-        <Globe size={32} className="opacity-50" />
-        <p className="text-sm">请先打开一个项目</p>
-        <p className="text-xs text-zinc-600">点击顶部工具栏选择项目文件夹</p>
+      <div className="flex-1 flex items-center justify-center text-zinc-500">
+        <RefreshCw size={24} className="animate-spin mr-2" />
+        加载中...
       </div>
     );
   }
 
-  if (!isInitialized) {
+  if (error) {
     return (
-      <div className="flex-1 flex items-center justify-center text-zinc-500">
-        <RefreshCw size={24} className="animate-spin mr-2" />
-        初始化项目...
+      <div className="flex-1 flex flex-col items-center justify-center text-red-400 gap-2">
+        <AlertCircle size={32} />
+        <p className="text-sm">{error}</p>
+      </div>
+    );
+  }
+
+  if (!worldModel) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 gap-2">
+        <Globe size={32} className="opacity-50" />
+        <p className="text-sm">暂无世界设定数据</p>
+        <p className="text-xs text-zinc-600">使用世界构建功能创建设定</p>
       </div>
     );
   }

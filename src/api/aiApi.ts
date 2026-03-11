@@ -1,5 +1,18 @@
 import { AIProvider } from '@/store/apiKeyStore';
 
+interface ToolDefinition {
+  type: 'function';
+  function: {
+    name: string;
+    description: string;
+    parameters: {
+      type: string;
+      properties: Record<string, { type: string; description: string; enum?: string[] }>;
+      required: string[];
+    };
+  };
+}
+
 interface GenerateOptions {
   provider: AIProvider;
   apiKey: string;
@@ -11,12 +24,67 @@ interface GenerateOptions {
   enableSearch?: boolean;
   onStream?: (chunk: string) => void;
   abortSignal?: AbortSignal;
+  tools?: ToolDefinition[];
 }
 
 interface EmbedOptions {
   text: string;
   apiKey: string;
   provider?: AIProvider;
+}
+
+const IS_DEV = import.meta.env.DEV;
+
+const API_BASE_URLS: Record<AIProvider, string> = {
+  gateway: 'https://api.openai.com',
+  openai: 'https://api.openai.com',
+  anthropic: 'https://api.anthropic.com',
+  google: 'https://generativelanguage.googleapis.com',
+  alibaba: 'https://dashscope.aliyuncs.com',
+  bytedance: 'https://api.openai.com',
+  deepseek: 'https://api.deepseek.com',
+  minimax: 'https://api.minimax.chat',
+  moonshot: 'https://api.moonshot.cn',
+  vercel: 'https://api.openai.com',
+  xai: 'https://api.x.ai',
+  zai: 'https://open.bigmodel.cn',
+};
+
+const API_PATHS: Record<AIProvider, string> = {
+  gateway: '/v1/chat/completions',
+  openai: '/v1/chat/completions',
+  anthropic: '/v1/messages',
+  google: '/v1beta/models',
+  alibaba: '/compatible-mode/v1/chat/completions',
+  bytedance: '/v1/chat/completions',
+  deepseek: '/v1/chat/completions',
+  minimax: '/v1/chat/completions',
+  moonshot: '/v1/chat/completions',
+  vercel: '/v1/chat/completions',
+  xai: '/v1/chat/completions',
+  zai: '/api/paas/v4/chat/completions',
+};
+
+const PROXY_PATHS: Record<AIProvider, string> = {
+  gateway: '/api/openai',
+  openai: '/api/openai',
+  anthropic: '/api/anthropic',
+  google: '/api/google',
+  alibaba: '/api/alibaba',
+  bytedance: '/api/openai',
+  deepseek: '/api/deepseek',
+  minimax: '/api/minimax',
+  moonshot: '/api/moonshot',
+  vercel: '/api/openai',
+  xai: '/api/xai',
+  zai: '/api/zai',
+};
+
+function getApiUrl(provider: AIProvider): string {
+  if (IS_DEV) {
+    return PROXY_PATHS[provider];
+  }
+  return API_BASE_URLS[provider];
 }
 
 const fetchWithTimeout = async (url: string, options: RequestInit, timeout = 120000) => {
@@ -50,21 +118,6 @@ const fetchWithTimeout = async (url: string, options: RequestInit, timeout = 120
   }
 };
 
-const API_ENDPOINTS: Record<AIProvider, { proxy: string; path: string }> = {
-  gateway: { proxy: '/api/openai', path: '/v1/chat/completions' },
-  openai: { proxy: '/api/openai', path: '/v1/chat/completions' },
-  anthropic: { proxy: '/api/anthropic', path: '/v1/messages' },
-  google: { proxy: '/api/google', path: '/v1beta/models' },
-  alibaba: { proxy: '/api/alibaba', path: '/compatible-mode/v1/chat/completions' },
-  bytedance: { proxy: '/api/openai', path: '/v1/chat/completions' },
-  deepseek: { proxy: '/api/deepseek', path: '/v1/chat/completions' },
-  minimax: { proxy: '/api/minimax', path: '/v1/chat/completions' },
-  moonshot: { proxy: '/api/moonshot', path: '/v1/chat/completions' },
-  vercel: { proxy: '/api/openai', path: '/v1/chat/completions' },
-  xai: { proxy: '/api/xai', path: '/v1/chat/completions' },
-  zai: { proxy: '/api/zai', path: '/api/paas/v4/chat/completions' },
-};
-
 function getActualModel(model: string): string {
   if (model.includes('/')) {
     return model.split('/').pop() || model;
@@ -85,7 +138,8 @@ export async function generateContent(options: GenerateOptions): Promise<string>
   } = options;
 
   const actualModel = getActualModel(model);
-  const endpoint = API_ENDPOINTS[provider] || API_ENDPOINTS['openai'];
+  const baseUrl = getApiUrl(provider);
+  const apiPath = API_PATHS[provider];
 
   if (provider === 'google') {
     const contents = [
@@ -98,7 +152,7 @@ export async function generateContent(options: GenerateOptions): Promise<string>
       { role: 'user', parts: [{ text: prompt }] },
     ];
 
-    const url = `${endpoint.proxy}${endpoint.path}/${actualModel}:generateContent?key=${apiKey}`;
+    const url = `${baseUrl}${apiPath}/${actualModel}:generateContent?key=${apiKey}`;
 
     const response = await fetchWithTimeout(
       url,
@@ -134,8 +188,10 @@ export async function generateContent(options: GenerateOptions): Promise<string>
     { role: 'user', content: prompt },
   ];
 
+  const url = `${baseUrl}${apiPath}`;
+
   if (onStream) {
-    const response = await fetch(`${endpoint.proxy}${endpoint.path}`, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -197,11 +253,11 @@ export async function generateContent(options: GenerateOptions): Promise<string>
       }
     }
 
-    return fullContent || '閺冪姵纭堕悽鐔稿灇閸ョ偛顦查妴';
+    return fullContent || '无响应内容';
   }
 
   const response = await fetchWithTimeout(
-    `${endpoint.proxy}${endpoint.path}`,
+    url,
     {
       method: 'POST',
       headers: {
@@ -224,15 +280,15 @@ export async function generateContent(options: GenerateOptions): Promise<string>
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || '閺冪姵纭堕悽鐔稿灇閸ョ偛顦查妴';
+  return data.choices?.[0]?.message?.content || '无响应内容';
 }
 
 export async function generateEmbedding(options: EmbedOptions): Promise<number[]> {
   const { text, apiKey, provider = 'google' } = options;
-  const endpoint = API_ENDPOINTS[provider] || API_ENDPOINTS['openai'];
+  const baseUrl = getApiUrl(provider);
 
   if (provider === 'google') {
-    const url = `${endpoint.proxy}/v1beta/models/text-embedding-004:embedContent?key=${apiKey}`;
+    const url = `${baseUrl}/v1beta/models/text-embedding-004:embedContent?key=${apiKey}`;
     const response = await fetchWithTimeout(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -248,7 +304,7 @@ export async function generateEmbedding(options: EmbedOptions): Promise<number[]
   }
 
   if (provider === 'zai') {
-    const response = await fetchWithTimeout(`${endpoint.proxy}/v4/embeddings`, {
+    const response = await fetchWithTimeout(`${baseUrl}/api/paas/v4/embeddings`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -265,7 +321,7 @@ export async function generateEmbedding(options: EmbedOptions): Promise<number[]
     return data.data?.[0]?.embedding || [];
   }
 
-  const response = await fetchWithTimeout(`${endpoint.proxy}/v1/embeddings`, {
+  const response = await fetchWithTimeout(`${baseUrl}/v1/embeddings`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -292,10 +348,11 @@ export async function validateApiKey(
   _baseUrl?: string
 ): Promise<{ valid: boolean; models?: Array<{ id: string; name: string }>; error?: string }> {
   try {
-    const endpoint = API_ENDPOINTS[provider] || API_ENDPOINTS['openai'];
+    const baseUrl = getApiUrl(provider);
+    const apiPath = API_PATHS[provider];
 
     if (provider === 'google') {
-      const url = `${endpoint.proxy}/v1beta/models?key=${apiKey}`;
+      const url = `${baseUrl}/v1beta/models?key=${apiKey}`;
       const response = await fetchWithTimeout(url, { method: 'GET' }, 30000);
 
       if (response.ok) {
@@ -313,7 +370,7 @@ export async function validateApiKey(
 
     if (provider === 'zai') {
       const response = await fetchWithTimeout(
-        `${endpoint.proxy}${endpoint.path}`,
+        `${baseUrl}${apiPath}`,
         {
           method: 'POST',
           headers: {
@@ -336,7 +393,7 @@ export async function validateApiKey(
     }
 
     const response = await fetchWithTimeout(
-      `${endpoint.proxy}/v1/models`,
+      `${baseUrl}/v1/models`,
       {
         method: 'GET',
         headers: { Authorization: `Bearer ${apiKey}` },

@@ -238,6 +238,33 @@ export class ToolRegistry {
 
     this.register(
       {
+        name: 'search_knowledge',
+        description: '搜索资料库内容，返回相关文本片段。用于快速查找特定信息。',
+        parameters: {
+          query: { type: 'string', description: '搜索关键词', required: true },
+          maxResults: { type: 'number', description: '最大结果数', default: 5 },
+        },
+        required: ['query'],
+        category: 'search',
+      },
+      this.searchKnowledge.bind(this)
+    );
+
+    this.register(
+      {
+        name: 'get_knowledge_content',
+        description: '获取资料库中某个文件的完整内容。用于学习写作风格、分析全文等需要完整内容的场景。返回文件的所有分块合并后的完整文本。',
+        parameters: {
+          filename: { type: 'string', description: '文件名', required: true },
+        },
+        required: ['filename'],
+        category: 'search',
+      },
+      this.getKnowledgeContent.bind(this)
+    );
+
+    this.register(
+      {
         name: 'get_character_info',
         description: '获取人物信息',
         parameters: {
@@ -762,15 +789,14 @@ export class ToolRegistry {
     );
   }
 
-  private async readFile(args: Record<string, unknown>, context: ToolContext): Promise<ToolResult> {
+  private async readFile(args: Record<string, unknown>, _context: ToolContext): Promise<ToolResult> {
     try {
       const path = args.path as string;
-      const fullPath = `${context.projectPath}/${path}`;
-      const exists = await workshopService.pathExists(fullPath);
+      const exists = await workshopService.pathExists(path);
       if (!exists) {
         return { toolCallId: generateId(), success: false, error: `File not found: ${path}` };
       }
-      const content = await workshopService.readFile(fullPath);
+      const content = await workshopService.readFile(path);
       return { toolCallId: generateId(), success: true, result: content };
     } catch (error) {
       return { toolCallId: generateId(), success: false, error: String(error) };
@@ -779,13 +805,12 @@ export class ToolRegistry {
 
   private async writeFile(
     args: Record<string, unknown>,
-    context: ToolContext
+    _context: ToolContext
   ): Promise<ToolResult> {
     try {
       const path = args.path as string;
       const content = args.content as string;
-      const fullPath = `${context.projectPath}/${path}`;
-      await workshopService.writeFile(fullPath, content);
+      await workshopService.writeFile(path, content);
       return { toolCallId: generateId(), success: true, result: { path, size: content.length } };
     } catch (error) {
       return { toolCallId: generateId(), success: false, error: String(error) };
@@ -794,12 +819,11 @@ export class ToolRegistry {
 
   private async deleteFile(
     args: Record<string, unknown>,
-    context: ToolContext
+    _context: ToolContext
   ): Promise<ToolResult> {
     try {
       const path = args.path as string;
-      const fullPath = `${context.projectPath}/${path}`;
-      await workshopService.deleteFile(fullPath);
+      await workshopService.deleteFile(path);
       return { toolCallId: generateId(), success: true, result: { deleted: path } };
     } catch (error) {
       return { toolCallId: generateId(), success: false, error: String(error) };
@@ -808,12 +832,11 @@ export class ToolRegistry {
 
   private async listDirectory(
     args: Record<string, unknown>,
-    context: ToolContext
+    _context: ToolContext
   ): Promise<ToolResult> {
     try {
       const path = (args.path as string) || '.';
-      const fullPath = `${context.projectPath}/${path}`;
-      const entries = await workshopService.readDirectory(fullPath);
+      const entries = await workshopService.readDirectory(path);
       return { toolCallId: generateId(), success: true, result: entries };
     } catch (error) {
       return { toolCallId: generateId(), success: false, error: String(error) };
@@ -832,6 +855,56 @@ export class ToolRegistry {
         return { toolCallId: generateId(), success: true, result: results };
       }
       return { toolCallId: generateId(), success: false, error: 'Knowledge service not available' };
+    } catch (error) {
+      return { toolCallId: generateId(), success: false, error: String(error) };
+    }
+  }
+
+  private async searchKnowledge(
+    args: Record<string, unknown>,
+    _context: ToolContext
+  ): Promise<ToolResult> {
+    try {
+      const query = args.query as string;
+      const maxResults = (args.maxResults as number) || 5;
+      if (!this.knowledgeService) {
+        return { toolCallId: generateId(), success: false, error: 'Knowledge service not available' };
+      }
+      const results = this.knowledgeService.search({ query, limit: maxResults });
+      const content = results.map((r) => `【相关度: ${r.score.toFixed(2)}】\n${r.chunk.content}`).join('\n\n---\n\n');
+      return { toolCallId: generateId(), success: true, result: content || '未找到相关内容' };
+    } catch (error) {
+      return { toolCallId: generateId(), success: false, error: String(error) };
+    }
+  }
+
+  private async getKnowledgeContent(
+    args: Record<string, unknown>,
+    _context: ToolContext
+  ): Promise<ToolResult> {
+    try {
+      const filename = args.filename as string;
+      
+      if (!this.knowledgeService) {
+        return { toolCallId: generateId(), success: false, error: 'Knowledge service not available' };
+      }
+      
+      const files = this.knowledgeService.getAllFiles();
+      
+      const file = files.find((f: { filename: string }) => f.filename === filename);
+      if (!file) {
+        return { toolCallId: generateId(), success: false, error: `文件 "${filename}" 不在资料库中` };
+      }
+      
+      const chunks = this.knowledgeService.getChunks(file.id);
+      
+      if (chunks.length === 0) {
+        return { toolCallId: generateId(), success: false, error: `文件 "${filename}" 没有内容分块` };
+      }
+      
+      const content = chunks.map((c: { content: string }) => c.content).join('\n\n');
+      
+      return { toolCallId: generateId(), success: true, result: content };
     } catch (error) {
       return { toolCallId: generateId(), success: false, error: String(error) };
     }

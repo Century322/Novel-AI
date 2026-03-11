@@ -26,13 +26,14 @@ interface FileActions {
 
 type FileStore = FileState & FileActions;
 
-function fileInfoToFileNode(info: FileInfo, isOpen: boolean = false): FileNode {
+function fileInfoToFileNode(info: FileInfo, expandedFolders: string[] = []): FileNode {
+  const isOpen = expandedFolders.includes(info.path);
   return {
     id: info.path,
     name: info.name,
     type: info.is_dir ? 'folder' : 'file',
     isOpen,
-    children: info.children?.map((c) => fileInfoToFileNode(c, false)),
+    children: info.children?.map((c) => fileInfoToFileNode(c, expandedFolders)),
   };
 }
 
@@ -146,7 +147,7 @@ export function useFileTreeFromProject() {
   const { expandedFolders } = useFileStore();
 
   const convertToFileNodes = (files: FileInfo[]): FileNode[] => {
-    return files.map((f) => fileInfoToFileNode(f, expandedFolders.includes(f.path)));
+    return files.map((f) => fileInfoToFileNode(f, expandedFolders));
   };
 
   return fileTree.length > 0 ? convertToFileNodes(fileTree) : [];

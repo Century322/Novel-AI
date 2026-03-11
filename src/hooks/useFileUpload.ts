@@ -8,7 +8,7 @@ import { logger } from '@/services/core/loggerService';
 
 export function useFileUpload() {
   const { addKnowledgeFile } = useSessionStore();
-  const { saveFileContent, refreshFileTree, currentProject } = useProjectStore();
+  const { saveFileContent, refreshFileTree } = useProjectStore();
 
   const handleFileUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -72,7 +72,7 @@ export function useFileUpload() {
   const handleWorkspaceUpload = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = e.target.files;
-      if (!files || !currentProject) {
+      if (!files) {
         return;
       }
 
@@ -93,7 +93,7 @@ export function useFileUpload() {
       await refreshFileTree();
       e.target.value = '';
     },
-    [currentProject, saveFileContent, refreshFileTree]
+    [saveFileContent, refreshFileTree]
   );
 
   return {

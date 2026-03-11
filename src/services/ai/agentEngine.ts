@@ -128,10 +128,10 @@ export class AgentEngine {
   private executionController: ExecutionController | null = null;
   private state: AgentState;
 
-  constructor(projectPath: string = '', config: Partial<AgentConfig> = {}) {
+  constructor(projectPath: string = '', config: Partial<AgentConfig> = {}, externalToolRegistry?: ToolRegistry) {
     this.projectPath = projectPath || 'default';
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.toolRegistry = createToolRegistry(this.projectPath);
+    this.toolRegistry = externalToolRegistry || createToolRegistry(this.projectPath);
 
     this.state = {
       iteration: 0,
@@ -502,6 +502,25 @@ export class AgentEngine {
       }
     }
 
+    const { getKnowledgeService } = await import('../core/serviceInitializer');
+    const knowledgeService = getKnowledgeService();
+    if (knowledgeService) {
+      const files = knowledgeService.getAllFiles();
+      if (files.length > 0) {
+        prompt += '\n\n## 资料库\n';
+        prompt += `当前资料库中有 ${files.length} 个文件：\n`;
+        for (const file of files.slice(0, 10)) {
+          prompt += `- ${file.filename} (${file.type}, ${file.chunkCount}个分块)\n`;
+        }
+        if (files.length > 10) {
+          prompt += `... 还有 ${files.length - 10} 个文件\n`;
+        }
+        prompt += '\n读取资料库内容的方法：\n';
+        prompt += '使用工具: get_knowledge_content({"filename": "文件名"})\n';
+        prompt += '使用工具: search_knowledge({"query": "关键词"})\n';
+      }
+    }
+
     if (this.config.enableTools) {
       const tools = this.toolRegistry.getDefinitions();
       prompt += '\n\n## 可用工具\n';
@@ -517,7 +536,6 @@ export class AgentEngine {
 
       prompt += '\n## 使用工具的格式\n';
       prompt += '使用工具: 工具名({"参数名": "参数值"})\n';
-      prompt += '例如: 使用工具: continue_writing({"context": "前文内容", "length": 300})\n';
     }
 
     prompt += '\n\n## 当前任务\n';
@@ -568,6 +586,10 @@ export class AgentEngine {
   }
 }
 
-export function createAgentEngine(projectPath: string, config?: Partial<AgentConfig>): AgentEngine {
-  return new AgentEngine(projectPath, config);
+export function createAgentEngine(
+  projectPath: string,
+  config?: Partial<AgentConfig>,
+  toolRegistry?: ToolRegistry
+): AgentEngine {
+  return new AgentEngine(projectPath, config, toolRegistry);
 }

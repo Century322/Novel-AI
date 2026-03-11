@@ -69,7 +69,7 @@ const STEP_ORDER: Step[] = [
 ];
 
 export const WorldBuildingWizard: React.FC = () => {
-  const { projectPath, isInitialized } = useWorkshopStore();
+  const { projectPath } = useWorkshopStore();
 
   const [currentStep, setCurrentStep] = useState<Step>('input');
   const [userInput, setUserInput] = useState('');
@@ -87,23 +87,10 @@ export const WorldBuildingWizard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!projectPath || !isInitialized) {
-      setWorldModelService(null);
-      return;
-    }
-
     const checkAndInit = async () => {
       try {
-        const { fileSystemService } = await import('@/services/core/fileSystemService');
-        const hasProject = fileSystemService.hasOpenProject();
-
-        if (!hasProject) {
-          setError('Please open a project first.');
-          return;
-        }
-
         setError(null);
-        const service = createWorldModelService(projectPath);
+        const service = createWorldModelService(projectPath || '');
         await service.initialize();
 
         setWorldModelService(service);
@@ -117,7 +104,7 @@ export const WorldBuildingWizard: React.FC = () => {
     };
 
     checkAndInit();
-  }, [projectPath, isInitialized]);
+  }, [projectPath]);
 
   const handleStartExtraction = useCallback(async () => {
     if (!userInput.trim() || !worldModelService) {
@@ -173,35 +160,17 @@ export const WorldBuildingWizard: React.FC = () => {
     });
   }, []);
 
-  if (!projectPath) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 gap-2">
-        <Sparkles size={32} className="opacity-50" />
-        <p className="text-sm">Open a project to continue.</p>
-      </div>
-    );
-  }
-
-  if (!isInitialized) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-zinc-500">
-        <RefreshCw size={24} className="animate-spin mr-2" />
-        Initializing project...
-      </div>
-    );
-  }
-
   if (error) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 gap-2">
         <AlertCircle size={32} className="text-red-400" />
-        <p className="text-sm text-red-400">Initialization Error</p>
+        <p className="text-sm text-red-400">初始化错误</p>
         <p className="text-xs text-zinc-600">{error}</p>
         <button
           onClick={() => window.location.reload()}
           className="mt-2 px-4 py-2 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
         >
-          Reload
+          重新加载
         </button>
       </div>
     );

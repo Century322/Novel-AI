@@ -29,6 +29,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
   const [showNewFileInput, setShowNewFileInput] = useState<string | null>(null);
   const [newFileName, setNewFileName] = useState('');
   const [newFileType, setNewFileType] = useState<'file' | 'folder'>('file');
+  const [isCreating, setIsCreating] = useState(false);
 
   const handleDelete = async (e: React.MouseEvent, node: FileNode) => {
     e.preventDefault();
@@ -47,18 +48,24 @@ export const FileTree: React.FC<FileTreeProps> = ({
   };
 
   const handleCreateNew = async (parentPath: string) => {
-    if (!newFileName.trim()) {
+    if (!newFileName.trim() || isCreating) {
       return;
     }
 
-    if (newFileType === 'folder') {
-      await createFolder(parentPath, newFileName.trim());
-    } else {
-      await createFile(parentPath, newFileName.trim());
+    setIsCreating(true);
+    try {
+      if (newFileType === 'folder') {
+        await createFolder(parentPath, newFileName.trim());
+      } else {
+        await createFile(parentPath, newFileName.trim());
+      }
+      setShowNewFileInput(null);
+      setNewFileName('');
+    } catch (error) {
+      console.error('创建失败:', error);
+    } finally {
+      setIsCreating(false);
     }
-
-    setShowNewFileInput(null);
-    setNewFileName('');
   };
 
   const handleAddNew = (e: React.MouseEvent, node: FileNode, type: 'file' | 'folder') => {
@@ -208,14 +215,15 @@ export const FileTree: React.FC<FileTreeProps> = ({
                 value={newFileName}
                 onChange={(e) => setNewFileName(e.target.value)}
                 onBlur={() => {
-                  if (newFileName.trim()) {
+                  if (newFileName.trim() && !isCreating) {
                     handleCreateNew(node.id);
-                  } else {
+                  } else if (!newFileName.trim()) {
                     setShowNewFileInput(null);
                   }
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newFileName.trim()) {
+                  if (e.key === 'Enter' && newFileName.trim() && !isCreating) {
+                    e.preventDefault();
                     handleCreateNew(node.id);
                   } else if (e.key === 'Escape') {
                     setShowNewFileInput(null);
@@ -224,6 +232,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
                 }}
                 placeholder={newFileType === 'folder' ? '文件夹名称' : '文件名.md'}
                 className="flex-1 bg-transparent border-b px-1 py-0.5 text-sm focus:outline-none min-w-0 border-blue-500/50 text-zinc-200 placeholder:text-zinc-500"
+                disabled={isCreating}
               />
             </div>
           )}
@@ -237,6 +246,11 @@ export const FileTree: React.FC<FileTreeProps> = ({
               showActions={showActions}
               isMobile={isMobile}
             />
+          )}
+          {node.type === 'folder' && !node.children && (
+            <div style={{ paddingLeft: `${(level + 1) * 12 + 8}px` }} className="text-zinc-500 text-xs py-1">
+              (空文件夹)
+            </div>
           )}
         </div>
       ))}

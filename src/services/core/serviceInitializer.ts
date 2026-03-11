@@ -177,10 +177,14 @@ export async function initializeServices(
     registry.toolRegistry.setNovelBibleService(registry.novelBibleService);
   }
 
-  registry.agentEngine = createAgentEngine(projectPath, {
-    maxIterations: Math.max(1, agentConfig.maxIterations || 1),
-    agentMode: agentConfig.agentMode ?? true,
-  });
+  registry.agentEngine = createAgentEngine(
+    projectPath,
+    {
+      maxIterations: Math.max(1, agentConfig.maxIterations || 1),
+      agentMode: agentConfig.agentMode ?? true,
+    },
+    registry.toolRegistry
+  );
   if (registry.memoryService) {
     registry.agentEngine.setMemoryService(registry.memoryService);
   }

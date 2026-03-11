@@ -84,8 +84,7 @@ export function FileContentPanel({
       <div className="flex-1 overflow-y-auto p-2 no-scrollbar min-h-0">
         <div className="h-full flex flex-col items-center justify-center text-sm opacity-50 text-zinc-400">
           <FileText size={32} className="mb-2 opacity-30" />
-          <p>请先打开项目</p>
-          <p className="text-xs mt-1">点击顶部"选择项目"按钮</p>
+          <p>选择左侧文件打开</p>
         </div>
       </div>
     </div>

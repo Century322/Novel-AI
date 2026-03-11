@@ -26,14 +26,13 @@ export const FileTreePanel: React.FC<FileTreePanelProps> = ({ width, onDragStart
     init();
   }, [init]);
 
-  const filteredFileNodes: FileNode[] = fileNodes
-    .filter((node) => !node.name.startsWith('.ai-workshop'))
-    .map((node) => ({
-      id: node.id,
-      name: node.name,
-      type: node.type,
-      children: node.children,
-    }));
+  const filteredFileNodes: FileNode[] = fileNodes.map((node) => ({
+    id: node.id,
+    name: node.name,
+    type: node.type,
+    isOpen: node.isOpen,
+    children: node.children,
+  }));
 
   const handleFileSelect = async (node: FileNode) => {
     if (node.type === 'file') {
@@ -53,17 +52,24 @@ export const FileTreePanel: React.FC<FileTreePanelProps> = ({ width, onDragStart
 
   const handleCreateNew = async () => {
     if (!newName.trim()) {
+      setShowNewInput(null);
       return;
     }
 
-    if (showNewInput === 'folder') {
-      await createFolder('', newName.trim());
-    } else {
-      await createFile('', newName.trim());
-    }
-
+    const nameToCreate = newName.trim();
     setShowNewInput(null);
     setNewName('');
+
+    try {
+      if (showNewInput === 'folder') {
+        await createFolder('', nameToCreate);
+      } else {
+        await createFile('', nameToCreate);
+      }
+      await refreshFileTree();
+    } catch (error) {
+      console.error('创建失败:', error);
+    }
   };
 
   return (

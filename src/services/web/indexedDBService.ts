@@ -73,10 +73,10 @@ class IndexedDBService {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(['projects'], 'readwrite');
       const store = transaction.objectStore('projects');
-      const request = store.add(project);
+      store.add(project);
 
-      request.onsuccess = () => resolve(project);
-      request.onerror = () => reject(new Error('Failed to create project'));
+      transaction.oncomplete = () => resolve(project);
+      transaction.onerror = () => reject(new Error('Failed to create project'));
     });
   }
 
@@ -149,12 +149,17 @@ class IndexedDBService {
     });
   }
 
-  async createFile(projectId: string, path: string, content: string = ''): Promise<FileEntry> {
+  async createFile(
+    projectId: string,
+    path: string,
+    content: string = '',
+    type: 'file' | 'directory' = 'file'
+  ): Promise<FileEntry> {
     const db = await this.init();
     const file: FileEntry & { projectId: string } = {
       path,
       content,
-      type: 'file',
+      type,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       projectId,
@@ -165,7 +170,8 @@ class IndexedDBService {
       const store = transaction.objectStore('files');
       const request = store.put(file);
 
-      request.onsuccess = () => resolve(file);
+      transaction.oncomplete = () => resolve(file);
+      transaction.onerror = () => reject(new Error('Failed to create file'));
       request.onerror = () => reject(new Error('Failed to create file'));
     });
   }
@@ -200,10 +206,10 @@ class IndexedDBService {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(['files'], 'readwrite');
       const store = transaction.objectStore('files');
-      const request = store.put(updated);
+      store.put(updated);
 
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(new Error('Failed to update file'));
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(new Error('Failed to update file'));
     });
   }
 
@@ -213,10 +219,10 @@ class IndexedDBService {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(['files'], 'readwrite');
       const store = transaction.objectStore('files');
-      const request = store.delete(path);
+      store.delete(path);
 
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(new Error('Failed to delete file'));
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = () => reject(new Error('Failed to delete file'));
     });
   }
 

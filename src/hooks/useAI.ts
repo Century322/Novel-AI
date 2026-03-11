@@ -120,12 +120,20 @@ export function useAI() {
     let disposed = false;
 
     const initServices = async () => {
-      if (!projectPath) {
+      const workshopStore = await import('@/store/workshopStore').then(m => m.useWorkshopStore);
+      const store = workshopStore.getState();
+      
+      if (!store.isInitialized) {
+        await store.init();
+      }
+      
+      const currentProjectPath = workshopStore.getState().projectPath;
+      if (!currentProjectPath) {
         await disposeServices();
         return;
       }
 
-      await initializeServices(projectPath, {
+      await initializeServices(currentProjectPath, {
         maxIterations: agentConfig.maxIterations || 1,
         agentMode: true,
       });
@@ -141,7 +149,7 @@ export function useAI() {
       disposed = true;
       disposeServices();
     };
-  }, [agentConfig.maxIterations, projectPath]);
+  }, [agentConfig.maxIterations]);
 
   useEffect(() => {
     const config = getCurrentConfig();
@@ -329,7 +337,7 @@ export function useAI() {
         await analyzeIntent(userMsg, history);
 
         const engine = getAgentEngine();
-        if (!engine || !projectPath) {
+        if (!engine) {
           const responseText = await callAI(userMsg, history);
           const fallbackText = await parseAndCreateFiles(responseText);
           updateLastMessage(fallbackText);

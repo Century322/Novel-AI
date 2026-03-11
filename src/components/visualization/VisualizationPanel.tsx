@@ -22,7 +22,6 @@ import {
   TrendingUp,
   FolderOpen,
 } from 'lucide-react';
-import { useProjectStore } from '@/store';
 import { workshopService } from '@/services/core/workshopService';
 import { logger } from '@/services/core/loggerService';
 
@@ -497,20 +496,12 @@ export const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ type, da
 };
 
 export const VisualizationDashboard: React.FC = () => {
-  const currentProject = useProjectStore((state) => state.currentProject);
-  const projectPath = currentProject?.path;
   const [visualizations, setVisualizations] = useState<Record<string, Record<string, unknown>>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const loadVisualizationData = async () => {
-      if (!projectPath) {
-        setLoading(false);
-        setVisualizations({});
-        return;
-      }
-
       setLoading(true);
       setError(null);
 
@@ -518,8 +509,7 @@ export const VisualizationDashboard: React.FC = () => {
         const data: Record<string, Record<string, unknown>> = {};
 
         try {
-          const timelinePath = `${projectPath}/设定/时间线.json`;
-          const timelineContent = await workshopService.readFile(timelinePath);
+          const timelineContent = await workshopService.readFile('设定/时间线.json');
           if (timelineContent) {
             const timelineData = JSON.parse(timelineContent);
             data.timeline = {
@@ -535,8 +525,7 @@ export const VisualizationDashboard: React.FC = () => {
         }
 
         try {
-          const charactersPath = `${projectPath}/设定/角色档案.json`;
-          const charactersContent = await workshopService.readFile(charactersPath);
+          const charactersContent = await workshopService.readFile('设定/角色档案.json');
           if (charactersContent) {
             const charactersData = JSON.parse(charactersContent);
             data.characters = {
@@ -554,8 +543,7 @@ export const VisualizationDashboard: React.FC = () => {
         }
 
         try {
-          const foreshadowingPath = `${projectPath}/设定/伏笔.json`;
-          const foreshadowingContent = await workshopService.readFile(foreshadowingPath);
+          const foreshadowingContent = await workshopService.readFile('设定/伏笔.json');
           if (foreshadowingContent) {
             const foreshadowingData = JSON.parse(foreshadowingContent);
             const items = Array.isArray(foreshadowingData)
@@ -576,8 +564,7 @@ export const VisualizationDashboard: React.FC = () => {
         }
 
         try {
-          const emotionPath = `${projectPath}/设定/情感分析.json`;
-          const emotionContent = await workshopService.readFile(emotionPath);
+          const emotionContent = await workshopService.readFile('设定/情感分析.json');
           if (emotionContent) {
             const emotionData = JSON.parse(emotionContent);
             data.emotion_arc = { stats: emotionData.stats || emotionData };
@@ -591,8 +578,7 @@ export const VisualizationDashboard: React.FC = () => {
         }
 
         try {
-          const conflictsPath = `${projectPath}/设定/冲突检测.json`;
-          const conflictsContent = await workshopService.readFile(conflictsPath);
+          const conflictsContent = await workshopService.readFile('设定/冲突检测.json');
           if (conflictsContent) {
             const conflictsData = JSON.parse(conflictsContent);
             const conflicts = Array.isArray(conflictsData)
@@ -618,20 +604,7 @@ export const VisualizationDashboard: React.FC = () => {
     };
 
     loadVisualizationData();
-  }, [projectPath]);
-
-  if (!projectPath) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full min-h-[400px] text-zinc-500 gap-4">
-        <FolderOpen size={64} className="opacity-30" />
-        <div className="text-center">
-          <p className="text-lg font-medium">请先打开一个项目</p>
-          <p className="text-sm mt-2 opacity-60">可视化需要项目数据支持</p>
-          <p className="text-xs mt-1 opacity-40">点击左上角"项目"菜单创建或打开项目</p>
-        </div>
-      </div>
-    );
-  }
+  }, []);
 
   if (loading) {
     return (

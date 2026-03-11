@@ -80,6 +80,7 @@ export const useWorkshopStore = create<WorkshopStore>()(
           set({
             isInitialized: true,
             isLoading: false,
+            projectPath: 'default',
             config,
             skills,
             agents,
