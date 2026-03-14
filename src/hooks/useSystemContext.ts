@@ -131,14 +131,14 @@ export function useSystemContext() {
           context += `... 还有 ${files.length - 10} 个文件\n`;
         }
         context += '\n【读取资料库内容的方法】\n';
-        context += '使用工具: get_knowledge_content({"filename": "文件名"})\n';
-        context += '使用工具: search_knowledge({"query": "关键词"})\n';
-        context += '\n【重要】学习写作风格时，必须使用 get_knowledge_content 获取完整内容！\n';
+        context += '使用工具: knowledge_ops({"action": "read", "filename": "文件名"})\n';
+        context += '使用工具: knowledge_ops({"action": "search", "query": "关键词"})\n';
+        context += '\n【重要】学习写作风格时，必须使用 knowledge_ops 的 read action 获取完整内容！\n';
       }
     }
 
     context += '\n\n【读取文件树文件的方法】\n';
-    context += '使用工具: read_file({"path": "文件路径"})\n';
+    context += '使用工具: file_ops({"action": "read", "path": "文件路径"})\n';
 
     context += '\n\n(你可以读取以上文件的内容来保持剧情连贯性)\n';
 

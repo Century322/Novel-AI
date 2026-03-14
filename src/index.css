@@ -1,6 +1,18 @@
 @import 'tailwindcss';
 @plugin "@tailwindcss/typography";
 
+input:focus,
+select:focus,
+textarea:focus,
+button:focus {
+  outline: none;
+}
+
+select option {
+  background-color: #27272a;
+  color: #e4e4e7;
+}
+
 @layer utilities {
   .glass-text {
     text-shadow: 0 0 10px rgba(255, 255, 255, 0.3);

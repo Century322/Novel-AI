@@ -99,9 +99,18 @@ export const useProjectStore = create<ProjectStore>()(
         await get().refreshFileTree();
 
         const tabStore = useTabStore.getState();
-        const tab = tabStore.getTabByFileId(path);
-        if (tab) {
-          tabStore.closeTab(tab.id);
+        if (node?.is_dir) {
+          const allTabs = tabStore.tabs;
+          for (const tab of allTabs) {
+            if (tab.fileId && tab.fileId.startsWith(path + '/')) {
+              tabStore.closeTab(tab.id);
+            }
+          }
+        } else {
+          const tab = tabStore.getTabByFileId(path);
+          if (tab) {
+            tabStore.closeTab(tab.id);
+          }
         }
       },
 

@@ -9,6 +9,8 @@ import {
 } from '@/types/core/llm';
 import { logger } from '../core/loggerService';
 
+export type { LLMMessage, LLMToolCall } from '@/types/core/llm';
+
 export interface LLMServiceConfig {
   defaultProvider: LLMProvider;
   defaultModel: string;
@@ -128,6 +130,10 @@ export class LLMService {
           parameters: t.function.parameters,
         },
       }));
+      logger.info('[LLMService] 传入工具定义', { 
+        toolCount: options.tools.length, 
+        toolNames: options.tools.map(t => t.function.name) 
+      });
     }
 
     if (options.stopSequences) {
@@ -181,6 +187,10 @@ export class LLMService {
         }));
       }
 
+      if (msg.role === 'tool' && msg.toolCallId) {
+        built.tool_call_id = msg.toolCallId;
+      }
+
       return built;
     });
   }
@@ -214,7 +224,8 @@ export class LLMService {
     requestId: string
   ): Promise<LLMResponse> {
     const providerConfig = PROVIDER_CONFIGS[provider];
-    const url = `${config.baseUrl || providerConfig.defaultBaseUrl}/chat/completions`;
+    const baseUrl = config.baseUrl || providerConfig?.defaultBaseUrl || 'https://api.openai.com/v1';
+    const url = `${baseUrl}/chat/completions`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -223,24 +234,38 @@ export class LLMService {
 
     const controller = new AbortController();
     this.abortControllers.set(requestId, controller);
+    
+    const timeoutId = setTimeout(() => {
+      controller.abort();
+    }, this.config.timeout);
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
 
-    this.abortControllers.delete(requestId);
+      clearTimeout(timeoutId);
+      this.abortControllers.delete(requestId);
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`API request failed: ${response.status} - ${error}`);
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`API request failed: ${response.status} - ${error}`);
+      }
+
+      const data = (await response.json()) as Record<string, unknown>;
+
+      return this.parseResponse(data);
+    } catch (error) {
+      clearTimeout(timeoutId);
+      this.abortControllers.delete(requestId);
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new Error(`Request timeout after ${this.config.timeout}ms`);
+      }
+      throw error;
     }
-
-    const data = (await response.json()) as Record<string, unknown>;
-
-    return this.parseResponse(data);
   }
 
   private getAuthHeaders(provider: LLMProvider, config: LLMConfig): Record<string, string> {
@@ -253,13 +278,16 @@ export class LLMService {
           'anthropic-version': '2023-06-01',
         };
       case 'deepseek':
-        return { Authorization: `Bearer ${config.apiKey}` };
-      case 'zhipu':
-        return { Authorization: `Bearer ${config.apiKey}` };
+      case 'zai':
       case 'moonshot':
+      case 'google':
+      case 'alibaba':
+      case 'bytedance':
+      case 'minimax':
+      case 'vercel':
+      case 'xai':
+      case 'gateway':
         return { Authorization: `Bearer ${config.apiKey}` };
-      case 'ollama':
-        return {};
       default:
         return { Authorization: `Bearer ${config.apiKey}` };
     }
@@ -271,11 +299,21 @@ export class LLMService {
     const message = choice?.message as Record<string, unknown> | undefined;
     const usage = data.usage as Record<string, unknown> | undefined;
 
+    const toolCalls = this.parseToolCalls(message?.tool_calls);
+    
+    logger.info('[LLMService] 解析响应', {
+      hasContent: !!message?.content,
+      contentLength: String(message?.content || '').length,
+      hasToolCalls: !!toolCalls,
+      toolCallCount: toolCalls?.length || 0,
+      finishReason: choice?.finish_reason,
+    });
+
     return {
       id: String(data.id || generateId()),
       content: String(message?.content || ''),
       role: 'assistant',
-      toolCalls: this.parseToolCalls(message?.tool_calls),
+      toolCalls,
       usage: {
         promptTokens: Number(usage?.prompt_tokens || 0),
         completionTokens: Number(usage?.completion_tokens || 0),
@@ -316,7 +354,8 @@ export class LLMService {
 
     const requestId = generateId();
     const providerConfig_ = PROVIDER_CONFIGS[provider];
-    const url = `${providerConfig.baseUrl || providerConfig_.defaultBaseUrl}/chat/completions`;
+    const baseUrl = providerConfig.baseUrl || providerConfig_?.defaultBaseUrl || 'https://api.openai.com/v1';
+    const url = `${baseUrl}/chat/completions`;
 
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',

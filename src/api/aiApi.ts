@@ -1,4 +1,5 @@
 import { AIProvider } from '@/store/apiKeyStore';
+import { logger } from '@/services/core/loggerService';
 
 interface ToolDefinition {
   type: 'function';
@@ -13,13 +14,28 @@ interface ToolDefinition {
   };
 }
 
+interface ToolCall {
+  id: string;
+  type: 'function';
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
+
+interface GenerateResult {
+  content: string;
+  toolCalls?: ToolCall[];
+  finishReason?: 'stop' | 'tool_calls' | 'length';
+}
+
 interface GenerateOptions {
   provider: AIProvider;
   apiKey: string;
   baseUrl?: string;
   model: string;
   prompt: string;
-  history?: Array<{ role: string; content: string }>;
+  history?: Array<{ role: string; content: string; toolCalls?: ToolCall[]; toolCallId?: string }>;
   systemContext?: string;
   enableSearch?: boolean;
   onStream?: (chunk: string) => void;
@@ -125,7 +141,7 @@ function getActualModel(model: string): string {
   return model;
 }
 
-export async function generateContent(options: GenerateOptions): Promise<string> {
+export async function generateContent(options: GenerateOptions): Promise<GenerateResult> {
   const {
     provider,
     apiKey,
@@ -135,6 +151,7 @@ export async function generateContent(options: GenerateOptions): Promise<string>
     systemContext,
     onStream,
     abortSignal,
+    tools,
   } = options;
 
   const actualModel = getActualModel(model);
@@ -174,34 +191,46 @@ export async function generateContent(options: GenerateOptions): Promise<string>
     }
 
     const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response text from Gemini.';
+    return { content: data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response text from Gemini.' };
   }
 
-  const messages = [
+  const messages: Array<{ role: string; content: string | null; tool_calls?: ToolCall[]; tool_call_id?: string }> = [
     ...(systemContext ? [{ role: 'system', content: systemContext }] : []),
     ...history
       .filter((m) => m.role !== 'system')
-      .map((m) => ({
-        role: m.role === 'user' ? 'user' : 'assistant',
-        content: m.content,
-      })),
+      .map((m) => {
+        if (m.role === 'tool') {
+          return { role: 'tool', content: m.content, tool_call_id: m.toolCallId };
+        }
+        if (m.toolCalls && m.toolCalls.length > 0) {
+          return { role: 'assistant', content: null, tool_calls: m.toolCalls };
+        }
+        return { role: m.role === 'user' ? 'user' : 'assistant', content: m.content };
+      }),
     { role: 'user', content: prompt },
   ];
 
   const url = `${baseUrl}${apiPath}`;
 
-  if (onStream) {
+  const requestBody: Record<string, unknown> = {
+    model: actualModel,
+    messages,
+  };
+
+  if (tools && tools.length > 0) {
+    requestBody.tools = tools;
+    requestBody.tool_choice = 'auto';
+  }
+
+  if (onStream && !tools) {
+    requestBody.stream = true;
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model: actualModel,
-        messages,
-        stream: true,
-      }),
+      body: JSON.stringify(requestBody),
       signal: abortSignal,
     });
 
@@ -246,14 +275,17 @@ export async function generateContent(options: GenerateOptions): Promise<string>
               fullContent += content;
               onStream(content);
             }
-          } catch {
-            // Ignore parse errors for incomplete chunks
+          } catch (parseError) {
+            logger.warn('流式响应JSON解析失败', { 
+              data: data.substring(0, 100), 
+              error: parseError instanceof Error ? parseError.message : String(parseError) 
+            });
           }
         }
       }
     }
 
-    return fullContent || '无响应内容';
+    return { content: fullContent || '无响应内容' };
   }
 
   const response = await fetchWithTimeout(
@@ -264,11 +296,7 @@ export async function generateContent(options: GenerateOptions): Promise<string>
         'Content-Type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
       },
-      body: JSON.stringify({
-        model: actualModel,
-        messages,
-        stream: false,
-      }),
+      body: JSON.stringify(requestBody),
       signal: abortSignal,
     },
     120000
@@ -280,7 +308,19 @@ export async function generateContent(options: GenerateOptions): Promise<string>
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || '无响应内容';
+  const message = data.choices?.[0]?.message;
+  const finishReason = data.choices?.[0]?.finish_reason;
+  
+  const result: GenerateResult = {
+    content: message?.content || '',
+    finishReason,
+  };
+
+  if (message?.tool_calls && message.tool_calls.length > 0) {
+    result.toolCalls = message.tool_calls;
+  }
+
+  return result;
 }
 
 export async function generateEmbedding(options: EmbedOptions): Promise<number[]> {

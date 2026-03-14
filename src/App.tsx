@@ -29,11 +29,9 @@ function App() {
   const [isSessionListOpen, setIsSessionListOpen] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showTerminalModal, setShowTerminalModal] = useState(false);
-  const [settingsInitialTab, setSettingsInitialTab] = useState<'general' | 'backup'>('general');
 
   const [isDraggingRight, setIsDraggingRight] = useState(false);
   const [isDraggingChat, setIsDraggingChat] = useState(false);
-  const [useAgent, setUseAgent] = useState(true);
 
   const [isMobile, setIsMobile] = useState(false);
   const [mobileView, setMobileView] = useState<'chat' | 'editor'>('chat');
@@ -106,8 +104,7 @@ function App() {
     return undefined;
   }, [isDraggingRight, isDraggingChat]);
 
-  const handleOpenSettings = (tab: 'general' | 'backup' = 'general') => {
-    setSettingsInitialTab(tab);
+  const handleOpenSettings = () => {
     setShowSettingsModal(true);
     setIsSessionListOpen(false);
   };
@@ -153,10 +150,8 @@ function App() {
           <ChatContent 
             width={window.innerWidth} 
             onDragStart={() => {}} 
-            useAgent={useAgent}
             isSessionListOpen={isSessionListOpen}
             onToggleSessionList={handleToggleSessionList}
-            onToggleAgent={() => setUseAgent(!useAgent)}
             onSwitchToEditor={() => setMobileView('editor')}
             onOpenSettings={() => {
               setIsSessionListOpen(false);
@@ -280,7 +275,7 @@ function App() {
                 )}
               </div>
               <div className="flex-1 overflow-hidden">
-                <SettingsPanel initialTab={settingsInitialTab} isMobile={isMobile} />
+                <SettingsPanel isMobile={isMobile} />
               </div>
             </div>
           </div>,
@@ -354,10 +349,8 @@ function App() {
       <ChatContent 
         width={chatWidth} 
         onDragStart={handleChatDragStart} 
-        useAgent={useAgent}
         isSessionListOpen={isSessionListOpen}
         onToggleSessionList={handleToggleSessionList}
-        onToggleAgent={() => setUseAgent(!useAgent)}
       />
 
       <div ref={containerRef} className="flex-1 flex overflow-hidden relative">
@@ -402,7 +395,7 @@ function App() {
               </button>
             </div>
             <div className="flex-1 overflow-hidden">
-              <SettingsPanel initialTab={settingsInitialTab} />
+              <SettingsPanel />
             </div>
           </div>
         </div>,

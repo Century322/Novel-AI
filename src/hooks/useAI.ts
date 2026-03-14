@@ -20,6 +20,7 @@ import type { ExtractionResult, ExtractedInfo } from '@/types/knowledge/extracti
 import type { Reminder, ReminderStats } from '@/types/writing/reminder';
 import type { StyleProfile } from '@/types/style/styleLearning';
 import type { ThinkingProcess } from '@/types/ai/thinkingProcess';
+import type { WorkshopMemoryType } from '@/types/core/workshop';
 import { infoExtractionService } from '@/services/analysis/infoExtractionService';
 import { llmService } from '@/services/ai/llmService';
 import { logger } from '@/services/core/loggerService';
@@ -56,7 +57,7 @@ function mapStoreProviderToLLMProvider(provider: string): LLMProvider {
     case 'moonshot':
       return 'moonshot';
     case 'zai':
-      return 'zhipu';
+      return 'zai';
     default:
       return 'openai';
   }
@@ -94,7 +95,7 @@ export function useAI() {
   const { addTask, updateTask } = useTaskStore();
   const { getCurrentConfig, hasValidKey, keys, selectedKeyId, selectedModelId } = useApiKeyStore();
   const { addNotification } = useNotificationStore();
-  const { projectPath } = useWorkshopStore();
+  const { projectPath, addMemoryEntry } = useWorkshopStore();
   const systemContext = useSystemContext();
 
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +105,7 @@ export function useAI() {
   const [thinkingProcess, setThinkingProcess] = useState<ThinkingProcess | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
+  const initAbortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const unsubscribe = thinkingProcessService.subscribe((process) => {
@@ -117,36 +119,56 @@ export function useAI() {
   }, []);
 
   useEffect(() => {
-    let disposed = false;
+    if (initAbortControllerRef.current) {
+      initAbortControllerRef.current.abort();
+    }
+    
+    const abortController = new AbortController();
+    initAbortControllerRef.current = abortController;
 
     const initServices = async () => {
-      const workshopStore = await import('@/store/workshopStore').then(m => m.useWorkshopStore);
-      const store = workshopStore.getState();
-      
-      if (!store.isInitialized) {
-        await store.init();
-      }
-      
-      const currentProjectPath = workshopStore.getState().projectPath;
-      if (!currentProjectPath) {
-        await disposeServices();
-        return;
-      }
+      try {
+        const workshopStore = await import('@/store/workshopStore').then(m => m.useWorkshopStore);
+        
+        if (abortController.signal.aborted) {
+          return;
+        }
+        
+        const store = workshopStore.getState();
+        
+        if (!store.isInitialized) {
+          await store.init();
+        }
+        
+        if (abortController.signal.aborted) {
+          return;
+        }
+        
+        const currentProjectPath = workshopStore.getState().projectPath;
+        if (!currentProjectPath) {
+          await disposeServices();
+          return;
+        }
 
-      await initializeServices(currentProjectPath, {
-        maxIterations: agentConfig.maxIterations || 1,
-        agentMode: true,
-      });
-
-      if (disposed) {
-        await disposeServices();
+        await initializeServices(currentProjectPath, {
+          maxIterations: agentConfig.maxIterations,
+          agentMode: true,
+        });
+        
+        if (abortController.signal.aborted) {
+          await disposeServices();
+        }
+      } catch (error) {
+        if (!abortController.signal.aborted) {
+          logger.error('服务初始化失败', { error });
+        }
       }
     };
 
     initServices();
 
     return () => {
-      disposed = true;
+      abortController.abort();
       disposeServices();
     };
   }, [agentConfig.maxIterations]);
@@ -206,7 +228,7 @@ export function useAI() {
       abortControllerRef.current = abortController;
 
       try {
-        return await generateContent({
+        const result = await generateContent({
           provider: key.provider,
           apiKey: key.apiKey,
           baseUrl: key.baseUrl,
@@ -218,6 +240,7 @@ export function useAI() {
           onStream,
           abortSignal: abortController.signal,
         });
+        return result.content;
       } finally {
         abortControllerRef.current = null;
       }
@@ -292,6 +315,18 @@ export function useAI() {
           updateLastMessage(finalText);
         }
 
+        try {
+          const memoryType = (currentIntent?.category === 'creation' ? 'plot' : 'general') as WorkshopMemoryType;
+          await addMemoryEntry({
+            type: memoryType,
+            content: `用户: ${userMsg.slice(0, 200)}\n助手: ${finalText.slice(0, 300)}`,
+            relevanceScore: 0.5,
+            metadata: { sessionId: currentSessionId },
+          });
+        } catch (memoryError) {
+          logger.warn('保存记忆失败', { error: memoryError });
+        }
+
         thinkingProcessService.completeStep(stepId);
         return finalText;
       } catch (err) {
@@ -307,7 +342,7 @@ export function useAI() {
         thinkingProcessService.endProcess();
       }
     },
-    [addMessage, analyzeIntent, callAI, clearCurrentAction, hasValidKey, parseAndCreateFiles, setCurrentAction, setProcessing, updateLastMessage]
+    [addMessage, analyzeIntent, callAI, clearCurrentAction, hasValidKey, parseAndCreateFiles, setCurrentAction, setProcessing, updateLastMessage, addMemoryEntry, currentIntent, currentSessionId]
   );
 
   const sendMessageWithAgent = useCallback(
@@ -365,16 +400,49 @@ export function useAI() {
           }
         });
 
-        if (!result.success && result.error) {
+        if (!result.success && result.error && !result.response) {
           throw new Error(result.error);
         }
 
         const responseText = result.response || '';
         const finalText = await parseAndCreateFiles(responseText);
-        updateLastMessage(finalText || responseText || 'Task completed.');
+
+        let displayText = finalText || responseText || 'Task completed.';
 
         if (result.toolCalls.length > 0) {
-          addMessage('system', `Agent executed ${result.toolCalls.length} tool call(s).`);
+          const toolCallSummary = result.toolCalls.map(tc => {
+            const resultStr = typeof tc.result === 'string' 
+              ? tc.result.substring(0, 200)
+              : JSON.stringify(tc.result).substring(0, 200);
+            const status = tc.success ? '✓' : '✗';
+            return `${status} **${tc.name}**: ${resultStr}${tc.error ? ` (错误: ${tc.error})` : ''}`;
+          }).join('\n');
+          
+          displayText += `\n\n---\n\n**工具执行记录** (${result.iterations} 次迭代, ${result.toolCalls.length} 次工具调用):\n${toolCallSummary}`;
+          
+          if (result.terminationReason) {
+            const reasonMap: Record<string, string> = {
+              'final_answer': '已完成回答',
+              'max_iterations': '达到最大迭代次数',
+              'error': '执行出错',
+              'user_abort': '用户中止'
+            };
+            displayText += `\n\n*结束原因: ${reasonMap[result.terminationReason] || result.terminationReason}*`;
+          }
+        }
+
+        updateLastMessage(displayText);
+
+        try {
+          const memoryType = (currentIntent?.category === 'creation' ? 'plot' : 'general') as WorkshopMemoryType;
+          await addMemoryEntry({
+            type: memoryType,
+            content: `用户: ${userMsg.slice(0, 200)}\n助手: ${(finalText || responseText).slice(0, 300)}`,
+            relevanceScore: 0.5,
+            metadata: { sessionId: currentSessionId, toolCalls: result.toolCalls.length },
+          });
+        } catch (memoryError) {
+          logger.warn('保存记忆失败', { error: memoryError });
         }
 
         setAgentState(createAgentState('completed', 'Completed'));
@@ -405,6 +473,9 @@ export function useAI() {
       setCurrentAction,
       setProcessing,
       updateLastMessage,
+      addMemoryEntry,
+      currentIntent,
+      currentSessionId,
     ]
   );
 

@@ -3,7 +3,7 @@ import { storyStateManager } from './storyStateManager';
 import type { StoryState } from '@/types/narrative/storyState';
 import type { SearchResult } from '@/types/retrieval/vectorStore';
 
-export interface ConsistencyIssue {
+export interface NarrativeConsistencyIssue {
   type: 'contradiction' | 'missing_info' | 'timeline_conflict' | 'character_inconsistency' | 'foreshadow_unresolved';
   severity: 'critical' | 'major' | 'minor';
   description: string;
@@ -13,8 +13,8 @@ export interface ConsistencyIssue {
 }
 
 export class ConsistencyChecker {
-  async checkContent(newContent: string): Promise<ConsistencyIssue[]> {
-    const issues: ConsistencyIssue[] = [];
+  async checkContent(newContent: string): Promise<NarrativeConsistencyIssue[]> {
+    const issues: NarrativeConsistencyIssue[] = [];
     const state = storyStateManager.getState();
 
     const relevantContent = await vectorStoreService.search(newContent, {
@@ -34,8 +34,8 @@ export class ConsistencyChecker {
     return issues;
   }
 
-  async checkFullStory(): Promise<ConsistencyIssue[]> {
-    const issues: ConsistencyIssue[] = [];
+  async checkFullStory(): Promise<NarrativeConsistencyIssue[]> {
+    const issues: NarrativeConsistencyIssue[] = [];
     const state = storyStateManager.getState();
 
     const foreshadowIssues = this.checkForeshadowing(state);
@@ -53,8 +53,8 @@ export class ConsistencyChecker {
   private async detectContradictions(
     newContent: string,
     relevantContent: SearchResult[]
-  ): Promise<ConsistencyIssue[]> {
-    const issues: ConsistencyIssue[] = [];
+  ): Promise<NarrativeConsistencyIssue[]> {
+    const issues: NarrativeConsistencyIssue[] = [];
 
     const contradictionPatterns: Array<{
       pattern: RegExp;
@@ -128,8 +128,8 @@ export class ConsistencyChecker {
   private async checkCharacterConsistency(
     content: string,
     state: StoryState
-  ): Promise<ConsistencyIssue[]> {
-    const issues: ConsistencyIssue[] = [];
+  ): Promise<NarrativeConsistencyIssue[]> {
+    const issues: NarrativeConsistencyIssue[] = [];
 
     for (const [_id, character] of Object.entries(state.characters)) {
       if (!content.includes(character.name)) continue;
@@ -172,8 +172,8 @@ export class ConsistencyChecker {
     return issues;
   }
 
-  private checkTimelineConsistency(content: string, state: StoryState): ConsistencyIssue[] {
-    const issues: ConsistencyIssue[] = [];
+  private checkTimelineConsistency(content: string, state: StoryState): NarrativeConsistencyIssue[] {
+    const issues: NarrativeConsistencyIssue[] = [];
 
     const timePatterns = [
       /(?:第[一二三四五六七八九十百千万]+天|过了?[一二三四五六七八九十百千万]+天|数天后|几日后)/,
@@ -207,8 +207,8 @@ export class ConsistencyChecker {
     return issues;
   }
 
-  private checkForeshadowing(state: StoryState): ConsistencyIssue[] {
-    const issues: ConsistencyIssue[] = [];
+  private checkForeshadowing(state: StoryState): NarrativeConsistencyIssue[] {
+    const issues: NarrativeConsistencyIssue[] = [];
 
     const unresolvedForeshadows = state.foreshadowing.planted.filter(
       (f) => !state.foreshadowing.resolved.includes(f.id)
@@ -237,8 +237,8 @@ export class ConsistencyChecker {
     return issues;
   }
 
-  private checkAllCharacterConsistency(state: StoryState): ConsistencyIssue[] {
-    const issues: ConsistencyIssue[] = [];
+  private checkAllCharacterConsistency(state: StoryState): NarrativeConsistencyIssue[] {
+    const issues: NarrativeConsistencyIssue[] = [];
 
     for (const [_id, character] of Object.entries(state.characters)) {
       if (character.arcProgress < 0.3 && character.lastAppearance) {
@@ -257,8 +257,8 @@ export class ConsistencyChecker {
     return issues;
   }
 
-  private checkTimelineGaps(state: StoryState): ConsistencyIssue[] {
-    const issues: ConsistencyIssue[] = [];
+  private checkTimelineGaps(state: StoryState): NarrativeConsistencyIssue[] {
+    const issues: NarrativeConsistencyIssue[] = [];
 
     const events = state.timeline.events;
     if (events.length < 2) return issues;

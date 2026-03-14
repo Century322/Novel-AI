@@ -1,4 +1,4 @@
-export interface QualityAssessment {
+export interface QualityCheckResult {
   id: string;
   content: string;
   timestamp: number;
@@ -77,18 +77,18 @@ export interface AssessmentContext {
 }
 
 export interface ProjectMemoryContext {
-  characters: CharacterContext[];
-  timeline: TimelineEvent[];
+  characters: QualityCharacterContext[];
+  timeline: SimpleTimelineEvent[];
   foreshadowing: ForeshadowingContext[];
 }
 
-export interface CharacterContext {
+export interface QualityCharacterContext {
   name: string;
   traits: string[];
   relationships: string[];
 }
 
-export interface TimelineEvent {
+export interface SimpleTimelineEvent {
   chapter: string;
   event: string;
 }
@@ -104,7 +104,7 @@ export interface DistillationResult {
   distilledContent: string;
   timestamp: number;
   type: DistillationType;
-  quality: QualityAssessment;
+  quality: QualityCheckResult;
   extractedKnowledge: ExtractedKnowledge[];
 }
 
@@ -123,12 +123,12 @@ export interface ExtractedKnowledge {
   source: string;
 }
 
-export interface StyleProfile {
+export interface SimpleStyleProfile {
   id: string;
   name: string;
   description: string;
   features: StyleFeature[];
-  examples: StyleExample[];
+  examples: SimpleStyleExample[];
   createdAt: number;
   updatedAt: number;
 }
@@ -139,7 +139,7 @@ export interface StyleFeature {
   description: string;
 }
 
-export interface StyleExample {
+export interface SimpleStyleExample {
   content: string;
   analysis: string;
 }

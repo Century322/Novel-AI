@@ -1,6 +1,6 @@
 export { useSessionStore } from './sessionStore';
 export { useFileStore } from './fileStore';
-export { useAgentStore } from './agentStore';
+export { useAgentStore, DEFAULT_AGENT_MAX_ITERATIONS, MIN_AGENT_MAX_ITERATIONS } from './agentStore';
 export { useTaskStore } from './taskStore';
 export { useUIStore } from './uiStore';
 export { useApiKeyStore, PROVIDERS } from './apiKeyStore';
@@ -12,7 +12,7 @@ export { useWorkshopStore } from './workshopStore';
 export { useTerminalStore } from './terminalStore';
 export { initializeSync } from './syncMiddleware';
 
-export type { ChatSession, Message, FileNode, AgentConfig, Task, Skill, SkillType } from '@/types';
+export type { ChatSession, Message, FileNode, SimpleAgentConfig, Task, Skill, SkillType } from '@/types';
 export type { ApiKeyConfig, AIProvider, ModelConfig } from './apiKeyStore';
 export type { Notification, NotificationType } from './notificationStore';
 export type { Tab, TabType } from './tabStore';

@@ -120,7 +120,7 @@ export interface AdaptationSkill {
   improvements: string[];
 }
 
-export interface StyleLearningProgress {
+export interface StyleInternalizationProgress {
   id: string;
   profileId: string;
 

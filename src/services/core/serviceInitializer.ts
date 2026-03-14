@@ -13,10 +13,12 @@ import { createWorldModelService } from '../world/worldModelService';
 import { createNovelBibleService, NovelBibleService } from '../world/novelBibleService';
 import { SettingExtractionService } from '../extraction/settingExtractionService';
 import { WorldBuildingService } from '../worldbuilding/worldBuildingService';
-import { createToolRegistry, ToolRegistry } from '../tools/toolRegistry';
+import { ToolRegistry } from '../tools/toolRegistry';
+import { createAggregatedToolRegistry } from '../tools/aggregated';
 import { createAgentEngine, AgentEngine } from '../ai/agentEngine';
 import { createIntentUnderstandingService, IntentUnderstandingService } from '../ai/intentUnderstandingService';
 import { logger } from './loggerService';
+import { DEFAULT_AGENT_MAX_ITERATIONS, MIN_AGENT_MAX_ITERATIONS } from '@/store/agentStore';
 
 export interface ServiceRegistry {
   container: ServiceContainer;
@@ -153,34 +155,12 @@ export async function initializeServices(
     registry.worldBuildingService.setExtractionService(registry.settingExtractionService);
   }
 
-  registry.toolRegistry = createToolRegistry(projectPath);
-  if (registry.knowledgeService) {
-    registry.toolRegistry.setKnowledgeService(registry.knowledgeService);
-  }
-  if (registry.memoryService) {
-    registry.toolRegistry.setMemoryService(registry.memoryService);
-  }
-  registry.toolRegistry.setCompressionService(registry.compressionService);
-  if (registry.styleService) {
-    registry.toolRegistry.setStyleService(registry.styleService);
-  }
-  registry.toolRegistry.setQualityService(registry.qualityService);
-  registry.toolRegistry.setCharacterService(registry.characterService);
-  registry.toolRegistry.setTimelineService(registry.timelineService);
-  registry.toolRegistry.setForeshadowingService(registry.foreshadowingService);
-  if (registry.worldModelService) {
-    registry.toolRegistry.setWorldModelService(registry.worldModelService);
-  }
-  registry.toolRegistry.setSettingExtractionService(registry.settingExtractionService);
-  registry.toolRegistry.setWorldBuildingService(registry.worldBuildingService);
-  if (registry.novelBibleService) {
-    registry.toolRegistry.setNovelBibleService(registry.novelBibleService);
-  }
+  registry.toolRegistry = createAggregatedToolRegistry(projectPath);
 
   registry.agentEngine = createAgentEngine(
     projectPath,
     {
-      maxIterations: Math.max(1, agentConfig.maxIterations || 1),
+      maxIterations: Math.max(MIN_AGENT_MAX_ITERATIONS, agentConfig.maxIterations ?? DEFAULT_AGENT_MAX_ITERATIONS),
       agentMode: agentConfig.agentMode ?? true,
     },
     registry.toolRegistry

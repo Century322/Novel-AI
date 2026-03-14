@@ -1,7 +1,7 @@
 import {
   CharacterArc,
   ArcStage,
-  CharacterState,
+  CharacterInnerState,
   Relationship,
   RelationshipMoment,
   RelationshipNetwork,
@@ -77,7 +77,7 @@ export class CharacterArcService {
     characterName: string,
     name: string,
     description: string,
-    startingState: CharacterState
+    startingState: CharacterInnerState
   ): Promise<CharacterArc> {
     const now = Date.now();
     const arc: CharacterArc = {
@@ -190,7 +190,7 @@ export class CharacterArcService {
     return true;
   }
 
-  async updateEndingState(arcId: string, endingState: Partial<CharacterState>): Promise<boolean> {
+  async updateEndingState(arcId: string, endingState: Partial<CharacterInnerState>): Promise<boolean> {
     const arc = this.arcs.get(arcId);
     if (!arc) {
       return false;

@@ -4,7 +4,7 @@ import {
   WorkshopConfig,
   SkillManifest,
   AgentManifest,
-  MemoryEntry,
+  WorkshopMemoryEntry,
   KnowledgeIndex,
 } from '@/types/core/workshop';
 import { CreationStage } from '@/types/writing/creationFlow';
@@ -18,7 +18,7 @@ interface WorkshopState {
   config: WorkshopConfig | null;
   skills: SkillManifest[];
   agents: AgentManifest[];
-  memory: MemoryEntry[];
+  memory: WorkshopMemoryEntry[];
   knowledgeIndex: KnowledgeIndex[];
   currentStage: CreationStage;
   progress: number;
@@ -33,12 +33,12 @@ interface WorkshopActions {
   scanSkills: () => Promise<void>;
   scanAgents: () => Promise<void>;
   addMemoryEntry: (
-    entry: Omit<MemoryEntry, 'id' | 'createdAt' | 'updatedAt' | 'accessCount'>
-  ) => Promise<MemoryEntry>;
-  updateMemoryEntry: (id: string, updates: Partial<MemoryEntry>) => Promise<boolean>;
+    entry: Omit<WorkshopMemoryEntry, 'id' | 'createdAt' | 'updatedAt' | 'accessCount'>
+  ) => Promise<WorkshopMemoryEntry>;
+  updateMemoryEntry: (id: string, updates: Partial<WorkshopMemoryEntry>) => Promise<boolean>;
   deleteMemoryEntry: (id: string) => Promise<boolean>;
-  getMemoryByType: (type: MemoryEntry['type']) => MemoryEntry[];
-  searchMemory: (query: string) => MemoryEntry[];
+  getMemoryByType: (type: WorkshopMemoryEntry['type']) => WorkshopMemoryEntry[];
+  searchMemory: (query: string) => WorkshopMemoryEntry[];
   refreshKnowledgeIndex: () => Promise<void>;
   getEnabledSkills: () => SkillManifest[];
   getEnabledAgents: () => AgentManifest[];
@@ -77,6 +77,29 @@ export const useWorkshopStore = create<WorkshopStore>()(
             workshopService.loadKnowledgeIndex(),
           ]);
 
+          const oldStore = localStorage.getItem('workshop-store');
+          let migratedMemory = memory;
+          if (oldStore) {
+            try {
+              const parsed = JSON.parse(oldStore);
+              const oldMemory = parsed?.state?.memory;
+              if (Array.isArray(oldMemory) && oldMemory.length > 0 && memory.length === 0) {
+                for (const entry of oldMemory) {
+                  await workshopService.addMemoryEntry({
+                    type: entry.type,
+                    content: entry.content,
+                    relevanceScore: entry.relevanceScore || 1,
+                    metadata: entry.metadata || {},
+                  });
+                }
+                migratedMemory = await workshopService.loadMemory();
+                logger.info('已从localStorage迁移记忆数据', { count: migratedMemory.length });
+              }
+            } catch (e) {
+              logger.warn('迁移旧数据失败', { error: e });
+            }
+          }
+
           set({
             isInitialized: true,
             isLoading: false,
@@ -84,7 +107,7 @@ export const useWorkshopStore = create<WorkshopStore>()(
             config,
             skills,
             agents,
-            memory,
+            memory: migratedMemory,
             knowledgeIndex,
           });
         } catch (error) {
@@ -167,9 +190,13 @@ export const useWorkshopStore = create<WorkshopStore>()(
       },
 
       deleteMemoryEntry: async (id) => {
+        logger.info('开始删除记忆', { id, currentMemoryCount: get().memory.length });
         const success = await workshopService.deleteMemoryEntry(id);
         if (success) {
           set((state) => ({ memory: state.memory.filter((e) => e.id !== id) }));
+          logger.info('记忆删除成功，已更新状态', { id, newMemoryCount: get().memory.length });
+        } else {
+          logger.warn('记忆删除失败: 服务返回false', { id });
         }
         return success;
       },
@@ -226,6 +253,13 @@ export const useWorkshopStore = create<WorkshopStore>()(
     {
       name: 'workshop-store',
       storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        isInitialized: state.isInitialized,
+        projectPath: state.projectPath,
+        config: state.config,
+        currentStage: state.currentStage,
+        progress: state.progress,
+      }),
     }
   )
 );

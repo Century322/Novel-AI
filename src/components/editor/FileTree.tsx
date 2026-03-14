@@ -1,9 +1,44 @@
 import React, { useState } from 'react';
 import { FileNode } from '@/types';
-import { Folder, FileText, ChevronRight, ChevronDown, Trash2, Edit2, Plus } from 'lucide-react';
+import { Folder, FileText, ChevronRight, ChevronDown, Trash2, Edit2, Plus, Sparkles, BookOpen, Brain, Settings, Wrench } from 'lucide-react';
 import { useFileStore, useProjectStore } from '@/store';
 import { cn } from '@/lib/utils';
 import { LongPressMenu } from '@/components/ui/LongPressMenu';
+import { logger } from '@/services/core/loggerService';
+
+const FOLDER_DISPLAY_NAMES: Record<string, { name: string; icon: React.ReactNode; description: string }> = {
+  '.ai-workshop': { name: 'AI工作区', icon: <Settings size={16} className="text-purple-400" />, description: 'AI系统配置和数据' },
+  'skills': { name: '技能模板', icon: <Sparkles size={16} className="text-purple-400" />, description: '自定义AI行为模板' },
+  'knowledge': { name: '资料库', icon: <BookOpen size={16} className="text-blue-400" />, description: '上传的参考资料' },
+  'memory': { name: 'AI记忆', icon: <Brain size={16} className="text-green-400" />, description: 'AI对话记忆存储' },
+  'agents': { name: '智能体', icon: <Brain size={16} className="text-orange-400" />, description: 'Agent配置' },
+  'tools': { name: '自定义工具', icon: <Wrench size={16} className="text-yellow-400" />, description: '自定义工具配置' },
+  'analysis': { name: '项目分析', icon: <Brain size={16} className="text-cyan-400" />, description: '小说分析结果' },
+  'chunks': { name: '文本分块', icon: <FileText size={16} className="text-zinc-400" />, description: '资料库分块数据' },
+  'files': { name: '原始文件', icon: <FileText size={16} className="text-zinc-400" />, description: '上传的原始文件' },
+  'system': { name: '系统预设', icon: <Settings size={16} className="text-zinc-400" />, description: '系统内置配置' },
+  'user': { name: '用户创建', icon: <Folder size={16} className="text-blue-400" />, description: '用户自定义内容' },
+  'custom': { name: '自定义', icon: <Wrench size={16} className="text-yellow-400" />, description: '用户自定义内容' },
+  'works': { name: '作品', icon: <FileText size={16} className="text-amber-400" />, description: '小说作品目录' },
+  'outline': { name: '大纲', icon: <FileText size={16} className="text-blue-400" />, description: '小说大纲' },
+  'characters': { name: '角色', icon: <Brain size={16} className="text-pink-400" />, description: '角色设定' },
+  'chapters': { name: '章节', icon: <FileText size={16} className="text-green-400" />, description: '小说章节' },
+  'settings': { name: '设定', icon: <Settings size={16} className="text-cyan-400" />, description: '世界观设定' },
+  'world': { name: '世界观', icon: <Brain size={16} className="text-indigo-400" />, description: '世界模型和小说圣经' },
+  'styles': { name: '风格配置', icon: <Sparkles size={16} className="text-pink-400" />, description: '写作风格配置' },
+  'author': { name: '作者配置', icon: <Brain size={16} className="text-violet-400" />, description: '作者风格学习' },
+  'versions': { name: '版本管理', icon: <Settings size={16} className="text-zinc-400" />, description: '版本快照' },
+  'backups': { name: '备份', icon: <Settings size={16} className="text-zinc-400" />, description: '项目备份' },
+  'snapshots': { name: '快照', icon: <Settings size={16} className="text-zinc-400" />, description: '版本快照存储' },
+};
+
+function getFolderDisplayName(name: string): { displayName: string; icon: React.ReactNode; description: string } {
+  const folderInfo = FOLDER_DISPLAY_NAMES[name];
+  if (folderInfo) {
+    return { displayName: folderInfo.name, icon: folderInfo.icon, description: folderInfo.description };
+  }
+  return { displayName: name, icon: <Folder size={16} className="text-blue-400/80" />, description: '' };
+}
 
 interface FileTreeProps {
   nodes: FileNode[];
@@ -62,7 +97,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
       setShowNewFileInput(null);
       setNewFileName('');
     } catch (error) {
-      console.error('创建失败:', error);
+      logger.error('创建失败', { error });
     } finally {
       setIsCreating(false);
     }
@@ -97,7 +132,7 @@ export const FileTree: React.FC<FileTreeProps> = ({
           >
             <div
               className={cn(
-                'group flex items-center gap-2 px-2 py-1.5 cursor-pointer text-sm transition-all duration-200 relative rounded-lg border',
+                'group flex items-center gap-2 px-2 py-2 sm:py-1.5 cursor-pointer text-sm transition-all duration-200 relative rounded-lg border',
                 selectedId === node.id
                   ? 'bg-white/10 text-white border-white/20'
                   : 'text-zinc-400 hover:bg-white/5 hover:text-zinc-200 border-transparent'
@@ -135,10 +170,12 @@ export const FileTree: React.FC<FileTreeProps> = ({
               <span
                 className={cn(
                   'mr-2 shrink-0',
-                  node.type === 'folder' ? 'text-blue-400/80' : 'text-zinc-500'
                 )}
               >
-                {node.type === 'folder' ? <Folder size={16} /> : <FileText size={16} />}
+                {node.type === 'folder' 
+                  ? getFolderDisplayName(node.name).icon 
+                  : <FileText size={16} className="text-zinc-500" />
+                }
               </span>
 
               {editingId === node.id ? (
@@ -159,7 +196,19 @@ export const FileTree: React.FC<FileTreeProps> = ({
                   onClick={(e) => e.stopPropagation()}
                 />
               ) : (
-                <span className="truncate flex-1 font-medium glass-text">{node.name}</span>
+                <div className="flex-1 min-w-0">
+                  <span className="truncate font-medium glass-text block">
+                    {node.type === 'folder' 
+                      ? getFolderDisplayName(node.name).displayName 
+                      : node.name
+                    }
+                  </span>
+                  {node.type === 'folder' && getFolderDisplayName(node.name).description && (
+                    <span className="text-[10px] text-zinc-500 block truncate">
+                      {getFolderDisplayName(node.name).description}
+                    </span>
+                  )}
+                </div>
               )}
 
               {showActions && !isMobile && (

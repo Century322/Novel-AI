@@ -97,7 +97,7 @@ export interface CharacterAbilities {
   weaknesses: string[];
 }
 
-export interface CharacterRelationship {
+export interface ProfileCharacterRelationship {
   targetId: string;
   targetName: string;
   relationshipType: string;
@@ -110,7 +110,7 @@ export interface CharacterRelationship {
   }>;
 }
 
-export interface CharacterArc {
+export interface ProfileCharacterArc {
   startingPoint: {
     state: string;
     beliefs: string[];
@@ -161,8 +161,8 @@ export interface CharacterProfile {
   background: CharacterBackground;
   abilities: CharacterAbilities;
 
-  relationships: CharacterRelationship[];
-  arc: CharacterArc;
+  relationships: ProfileCharacterRelationship[];
+  arc: ProfileCharacterArc;
   secrets: CharacterSecret[];
   motivations: CharacterMotivation;
 

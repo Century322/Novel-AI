@@ -24,7 +24,6 @@ import {
   RefreshCw,
   PanelLeft,
   ChevronRight,
-  Check,
   Undo2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -45,10 +44,8 @@ import { ThinkingProcessViewer } from '@/components/ai/ThinkingProcessViewer';
 interface ChatContentProps {
   width: number;
   onDragStart: (e: React.MouseEvent) => void;
-  useAgent?: boolean;
   isSessionListOpen?: boolean;
   onToggleSessionList?: () => void;
-  onToggleAgent?: () => void;
   onSwitchToEditor?: () => void;
   onOpenSettings?: () => void;
   isMobile?: boolean;
@@ -65,10 +62,8 @@ interface MessageChange {
 export const ChatContent: React.FC<ChatContentProps> = ({
   width,
   onDragStart,
-  useAgent: useAgentProp = true,
   isSessionListOpen = false,
   onToggleSessionList,
-  onToggleAgent,
   onSwitchToEditor,
   onOpenSettings,
   isMobile = false,
@@ -80,7 +75,6 @@ export const ChatContent: React.FC<ChatContentProps> = ({
 
   const [input, setInput] = useState('');
   const [showGuide, setShowGuide] = useState(false);
-  const [showAgentDropdown, setShowAgentDropdown] = useState(false);
   const [currentGuidedCard, setCurrentGuidedCard] = useState<GuidedCard | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
@@ -93,11 +87,8 @@ export const ChatContent: React.FC<ChatContentProps> = ({
     {}
   );
 
-  const useAgent = useAgentProp;
-
   const messages = useMessages();
   const {
-    sendMessage,
     sendMessageWithAgent,
     isProcessing: aiProcessing,
     error,
@@ -291,11 +282,7 @@ export const ChatContent: React.FC<ChatContentProps> = ({
     }
 
     try {
-      if (useAgent) {
-        await sendMessageWithAgent(userMsg, messages);
-      } else {
-        await sendMessage(userMsg, messages);
-      }
+      await sendMessageWithAgent(userMsg, messages);
     } catch (err) {
       logger.error('发送消息失败', { error: err });
     }
@@ -380,11 +367,19 @@ export const ChatContent: React.FC<ChatContentProps> = ({
   const handleRegenerate = async (msgId: string) => {
     const msgIndex = messages.findIndex((m) => m.id === msgId);
     if (msgIndex <= 0) {
+      if (msgIndex === 0) {
+        logger.warn('无法重新生成第一条消息');
+      }
       return;
     }
 
     const userMessage = messages[msgIndex - 1];
+    if (!userMessage) {
+      logger.warn('找不到对应的用户消息');
+      return;
+    }
     if (userMessage.role !== 'user') {
+      logger.warn('前一条消息不是用户消息，无法重新生成');
       return;
     }
 
@@ -392,7 +387,7 @@ export const ChatContent: React.FC<ChatContentProps> = ({
     deleteMessage(msgId);
 
     setTimeout(() => {
-      sendMessage(userMessage.content, messages.slice(0, msgIndex - 1));
+      sendMessageWithAgent(userMessage.content, messages.slice(0, msgIndex - 1));
     }, 100);
   };
 
@@ -748,70 +743,29 @@ export const ChatContent: React.FC<ChatContentProps> = ({
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={useAgent ? '输入消息或命令（如：续写、润色、分析人物...）' : '输入消息...'}
+            placeholder="输入消息或命令（如：续写、润色、分析人物...）"
             className="w-full bg-transparent resize-none text-[13px] focus:outline-none leading-relaxed p-3 min-h-[100px] text-zinc-200 placeholder-zinc-500"
           />
           <div className="flex items-center justify-between px-3 py-2 gap-2">
             <div className="flex items-center gap-2">
               <ModelSelector className="shrink-0" onOpenSettings={onOpenSettings} />
-              {onToggleAgent && (
-                <div className="relative">
-                  <button
-                    onClick={() => setShowAgentDropdown(!showAgentDropdown)}
-                    className="flex items-center gap-1 text-xs text-zinc-400 hover:text-zinc-200 transition-colors"
-                  >
-                    <span>{useAgent ? 'Agent' : '普通'}</span>
-                    <ChevronDown size={12} />
-                  </button>
-                  {showAgentDropdown && (
-                    <div className="absolute bottom-full left-0 mb-1 bg-zinc-800 border border-zinc-700 rounded-lg shadow-lg min-w-[80px] overflow-hidden z-50">
-                      <button
-                        onClick={() => {
-                          if (!useAgent) onToggleAgent();
-                          setShowAgentDropdown(false);
-                        }}
-                        className={cn(
-                          "w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-white/5",
-                          useAgent ? "text-zinc-200" : "text-zinc-400"
-                        )}
-                      >
-                        {useAgent && <Check size={12} />}
-                        <span className={useAgent ? "" : "ml-4"}>Agent</span>
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (useAgent) onToggleAgent();
-                          setShowAgentDropdown(false);
-                        }}
-                        className={cn(
-                          "w-full flex items-center gap-2 px-3 py-2 text-xs text-left hover:bg-white/5",
-                          !useAgent ? "text-zinc-200" : "text-zinc-400"
-                        )}
-                      >
-                        {!useAgent && <Check size={12} />}
-                        <span className={!useAgent ? "" : "ml-4"}>普通</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
             </div>
             <div className="flex items-center gap-2 ml-auto">
               <button
                 onClick={toggleRecording}
                 className={cn(
-                  'p-1.5 rounded transition-colors shrink-0',
+                  'p-2 rounded transition-colors shrink-0',
                   isRecording
                     ? 'bg-red-500 text-white hover:bg-red-600'
                     : 'bg-white/10 text-zinc-400 hover:bg-white/20'
                 )}
               >
-                {isRecording ? <MicOff size={12} /> : <Mic size={12} />}
+                {isRecording ? <MicOff size={16} className="sm:w-3 sm:h-3" /> : <Mic size={16} className="sm:w-3 sm:h-3" />}
               </button>
               <button
                 onClick={isProcessing ? abort : handleSend}
                 className={cn(
-                  'p-1.5 rounded transition-colors shrink-0',
+                  'p-2 rounded transition-colors shrink-0',
                   isProcessing
                     ? 'bg-red-500 text-white hover:bg-red-600'
                     : input.trim()
@@ -820,7 +774,7 @@ export const ChatContent: React.FC<ChatContentProps> = ({
                 )}
                 title={isProcessing ? '点击中断生成' : '发送'}
               >
-                {isProcessing ? <XCircle size={12} /> : <Send size={12} />}
+                {isProcessing ? <XCircle size={16} className="sm:w-3 sm:h-3" /> : <Send size={16} className="sm:w-3 sm:h-3" />}
               </button>
             </div>
           </div>

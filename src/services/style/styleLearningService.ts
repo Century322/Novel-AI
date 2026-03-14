@@ -1,8 +1,8 @@
 import { workshopService } from '../core/workshopService';
 import {
-  StyleProfile,
+  SimpleStyleProfile,
   StyleFeature,
-  StyleExample,
+  SimpleStyleExample,
   StyleAnalysis,
   StyleMetric,
   EmotionalTone,
@@ -15,7 +15,7 @@ function generateId(): string {
 
 export class StyleLearningService {
   private projectPath: string;
-  private profiles: Map<string, StyleProfile> = new Map();
+  private profiles: Map<string, SimpleStyleProfile> = new Map();
 
   constructor(projectPath: string) {
     this.projectPath = projectPath;
@@ -204,7 +204,7 @@ export class StyleLearningService {
     name: string,
     description: string,
     sampleContents: string[]
-  ): Promise<StyleProfile> {
+  ): Promise<SimpleStyleProfile> {
     const allAnalysis: StyleAnalysis[] = [];
 
     for (const content of sampleContents) {
@@ -213,12 +213,12 @@ export class StyleLearningService {
     }
 
     const features = this.aggregateFeatures(allAnalysis);
-    const examples: StyleExample[] = sampleContents.map((content, index) => ({
+    const examples: SimpleStyleExample[] = sampleContents.map((content, index) => ({
       content: content.substring(0, 500),
       analysis: `样本 ${index + 1} 分析`,
     }));
 
-    const profile: StyleProfile = {
+    const profile: SimpleStyleProfile = {
       id: generateId(),
       name,
       description,
@@ -401,15 +401,15 @@ export class StyleLearningService {
     return value.toFixed(1);
   }
 
-  getProfile(profileId: string): StyleProfile | undefined {
+  getProfile(profileId: string): SimpleStyleProfile | undefined {
     return this.profiles.get(profileId);
   }
 
-  getAllProfiles(): StyleProfile[] {
+  getAllProfiles(): SimpleStyleProfile[] {
     return Array.from(this.profiles.values());
   }
 
-  async updateProfile(profileId: string, updates: Partial<StyleProfile>): Promise<boolean> {
+  async updateProfile(profileId: string, updates: Partial<SimpleStyleProfile>): Promise<boolean> {
     const profile = this.profiles.get(profileId);
     if (!profile) {
       return false;

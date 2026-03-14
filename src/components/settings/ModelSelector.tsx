@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useApiKeyStore, getProviderConfig, PROVIDERS } from '@/store/apiKeyStore';
-import { ChevronDown, Check, Plus, Key, Trash2, Eye, EyeOff, X, Zap } from 'lucide-react';
+import { ChevronDown, Check, Plus, Key, Trash2, Eye, EyeOff, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { AIProvider } from '@/config/providers';
 
@@ -27,6 +27,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ className, onOpenS
   const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+
   const [newKeyProvider, setNewKeyProvider] = useState<AIProvider>('openai');
   const [newKeyValue, setNewKeyValue] = useState('');
   const [newKeyName, setNewKeyName] = useState('');
@@ -47,17 +49,29 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ className, onOpenS
 
   useEffect(() => {
     if (isOpen && buttonRef.current) {
-      const rect = buttonRef.current.getBoundingClientRect();
-      setDropdownStyle({
-        position: 'fixed',
-        bottom: window.innerHeight - rect.top + 8,
-        left: rect.left,
-        zIndex: 99999,
-        maxWidth: '320px',
-        width: 'max-content',
-      });
+      if (isMobile) {
+        setDropdownStyle({
+          position: 'fixed',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 99999,
+          maxWidth: '90vw',
+          width: '320px',
+        });
+      } else {
+        const rect = buttonRef.current.getBoundingClientRect();
+        setDropdownStyle({
+          position: 'fixed',
+          bottom: window.innerHeight - rect.top + 8,
+          left: rect.left,
+          zIndex: 99999,
+          maxWidth: '320px',
+          width: 'max-content',
+        });
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, isMobile]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent | TouchEvent) => {
@@ -120,7 +134,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ className, onOpenS
           className
         )}
       >
-        <Zap size={12} className={currentConfig ? 'text-yellow-400' : ''} />
         <span className="truncate max-w-[100px]">{currentConfig?.model.name || '选择模型'}</span>
         <ChevronDown
           size={12}
@@ -130,11 +143,29 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ className, onOpenS
 
       {isOpen &&
         createPortal(
-          <div
-            ref={dropdownRef}
-            style={dropdownStyle}
-            className="rounded-xl shadow-2xl border overflow-hidden bg-zinc-900 border-zinc-700"
-          >
+          <>
+            {isMobile && (
+              <div
+                className="fixed inset-0 bg-black/50 z-[99998]"
+                onClick={() => setIsOpen(false)}
+              />
+            )}
+            <div
+              ref={dropdownRef}
+              style={dropdownStyle}
+              className="rounded-xl shadow-2xl border overflow-hidden bg-zinc-800 border-zinc-700"
+            >
+              {isMobile && (
+                <div className="flex items-center justify-between px-3 py-2 border-b border-zinc-700">
+                  <span className="text-sm font-medium text-zinc-200">选择模型</span>
+                  <button
+                    onClick={() => setIsOpen(false)}
+                    className="p-1 rounded hover:bg-white/10 text-zinc-400"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              )}
             {showAddKey ? (
               <div className="p-3 space-y-3 w-[280px]">
                 <div className="flex items-center justify-between">
@@ -152,7 +183,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ className, onOpenS
                   <select
                     value={newKeyProvider}
                     onChange={(e) => setNewKeyProvider(e.target.value as AIProvider)}
-                    className="w-full px-2 py-1.5 rounded border border-white/10 bg-black/20 text-zinc-200 text-xs"
+                    className="w-full px-2 py-1.5 rounded border border-white/10 bg-zinc-700/50 text-zinc-200 text-xs focus:outline-none focus:border-white/20"
                   >
                     {PROVIDERS.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -169,7 +200,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ className, onOpenS
                     value={newKeyName}
                     onChange={(e) => setNewKeyName(e.target.value)}
                     placeholder={getProviderConfig(newKeyProvider)?.name || ''}
-                    className="w-full px-2 py-1.5 rounded border border-white/10 bg-black/20 text-zinc-200 text-xs"
+                    className="w-full px-2 py-1.5 rounded border border-white/10 bg-zinc-700/50 text-zinc-200 text-xs focus:outline-none focus:border-white/20"
                   />
                 </div>
 
@@ -181,7 +212,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ className, onOpenS
                       value={newKeyValue}
                       onChange={(e) => setNewKeyValue(e.target.value)}
                       placeholder="输入密钥..."
-                      className="w-full px-2 py-1.5 pr-8 rounded border border-white/10 bg-black/20 text-zinc-200 text-xs"
+                      className="w-full px-2 py-1.5 pr-8 rounded border border-white/10 bg-zinc-700/50 text-zinc-200 text-xs focus:outline-none focus:border-white/20"
                     />
                     <button
                       type="button"
@@ -201,7 +232,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ className, onOpenS
                       value={newKeyBaseUrl}
                       onChange={(e) => setNewKeyBaseUrl(e.target.value)}
                       placeholder="https://api.example.com"
-                      className="w-full px-2 py-1.5 rounded border border-white/10 bg-black/20 text-zinc-200 text-xs"
+                      className="w-full px-2 py-1.5 rounded border border-white/10 bg-zinc-700/50 text-zinc-200 text-xs focus:outline-none focus:border-white/20"
                     />
                   </div>
                 )}
@@ -221,7 +252,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ className, onOpenS
               </div>
             ) : (
               <>
-                <div className="px-3 py-2 text-xs border-b flex justify-between items-center bg-zinc-800 text-zinc-400 border-zinc-700">
+                <div className="px-3 py-2 text-xs border-b flex justify-between items-center bg-zinc-700/50 text-zinc-400 border-zinc-600">
                   <span>
                     {keys.length > 0
                       ? `${keys.length} 个密钥 · ${totalModels} 个模型`
@@ -239,8 +270,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ className, onOpenS
                 {keys.length > 0 && (
                   <div className="max-h-48 overflow-y-auto">
                     {keys.map((key) => (
-                      <div key={key.id} className="border-b border-zinc-800 last:border-b-0">
-                        <div className="px-3 py-2 flex items-center justify-between bg-zinc-800/50">
+                      <div key={key.id} className="border-b border-zinc-700 last:border-b-0">
+                        <div className="px-3 py-2 flex items-center justify-between bg-zinc-700/30">
                           <div className="flex items-center gap-2">
                             <Key
                               size={10}
@@ -281,7 +312,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ className, onOpenS
                                     'px-3 py-1.5 flex items-center gap-2 cursor-pointer',
                                     isSelected
                                       ? 'bg-sky-900/50 text-sky-400'
-                                      : 'hover:bg-zinc-800 text-zinc-400'
+                                      : 'hover:bg-white/10 text-zinc-400'
                                   )}
                                 >
                                   <span className="flex-1 text-xs truncate">{model.name}</span>
@@ -320,7 +351,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({ className, onOpenS
                 )}
               </>
             )}
-          </div>,
+            </div>
+          </>,
           document.body
         )}
     </>

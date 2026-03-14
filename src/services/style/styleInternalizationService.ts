@@ -2,7 +2,7 @@ import {
   StyleInternalization,
   StyleElementMastery,
   InternalizedPattern,
-  StyleLearningProgress,
+  StyleInternalizationProgress,
   StyleExercise,
   ExerciseResult,
   StyleElement,
@@ -19,7 +19,7 @@ import { logger } from '../core/loggerService';
 export class StyleInternalizationService {
   private projectPath: string;
   private internalizations: Map<string, StyleInternalization> = new Map();
-  private progress: Map<string, StyleLearningProgress> = new Map();
+  private progress: Map<string, StyleInternalizationProgress> = new Map();
   private exercises: Map<string, StyleExercise> = new Map();
   private results: Map<string, ExerciseResult[]> = new Map();
 
@@ -47,7 +47,7 @@ export class StyleInternalizationService {
 
       const progressContent = await workshopService.readFile(`${basePath}/学习进度.json`);
       if (progressContent) {
-        const data: StyleLearningProgress[] = JSON.parse(progressContent);
+        const data: StyleInternalizationProgress[] = JSON.parse(progressContent);
         this.progress = new Map(data.map((p) => [p.profileId, p]));
       }
 
@@ -158,7 +158,7 @@ export class StyleInternalizationService {
 
     this.internalizations.set(internalization.id, internalization);
 
-    const progressRecord: StyleLearningProgress = {
+    const progressRecord: StyleInternalizationProgress = {
       id: `progress_${uuidv4()}`,
       profileId,
       totalExposure: 0,
@@ -618,7 +618,7 @@ export class StyleInternalizationService {
     return Array.from(this.internalizations.values()).find((i) => i.profileId === profileId);
   }
 
-  getProgress(profileId: string): StyleLearningProgress | undefined {
+  getProgress(profileId: string): StyleInternalizationProgress | undefined {
     return this.progress.get(profileId);
   }
 

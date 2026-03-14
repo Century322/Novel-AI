@@ -4,7 +4,7 @@ import {
   DistillationResult,
   DistillationType,
   ExtractedKnowledge,
-  QualityAssessment,
+  QualityCheckResult,
 } from '@/types/writing/quality';
 import { KnowledgeService } from '../knowledge/knowledgeService';
 
@@ -28,7 +28,7 @@ export class DistillationService {
   async distill(
     content: string,
     type: DistillationType,
-    quality?: QualityAssessment
+    quality?: QualityCheckResult
   ): Promise<DistillationResult> {
     let distilledContent: string;
     let extractedKnowledge: ExtractedKnowledge[] = [];
@@ -541,7 +541,7 @@ export class DistillationService {
 
   private async distillLessonLearned(
     content: string,
-    quality?: QualityAssessment
+    quality?: QualityCheckResult
   ): Promise<string> {
     let lesson = '## 经验教训\n\n';
 
@@ -740,7 +740,7 @@ export class DistillationService {
     ];
   }
 
-  private async createBasicQuality(content: string): Promise<QualityAssessment> {
+  private async createBasicQuality(content: string): Promise<QualityCheckResult> {
     return {
       id: generateId(),
       content: content.substring(0, 500),

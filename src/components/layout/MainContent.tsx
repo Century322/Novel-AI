@@ -9,7 +9,6 @@ import { logger } from '@/services/core/loggerService';
 
 interface MainContentProps {
   showSettingsPanel: boolean;
-  settingsInitialTab?: 'general' | 'backup';
   activeTabOverride?: {
     id: string;
     type: string;
@@ -21,10 +20,9 @@ interface MainContentProps {
 
 export const MainContent: React.FC<MainContentProps> = ({
   showSettingsPanel,
-  settingsInitialTab,
   activeTabOverride,
 }) => {
-  const { getActiveTab } = useTabStore();
+  const { getActiveTab, closeTab } = useTabStore();
   const { getFileContent, saveFileContent } = useProjectStore();
 
   const [isEditMode, setIsEditMode] = React.useState(true);
@@ -52,7 +50,7 @@ export const MainContent: React.FC<MainContentProps> = ({
   }, [activeTab?.fileId, activeTab?.type, getFileContent]);
 
   if (showSettingsPanel) {
-    return <SettingsPanel initialTab={settingsInitialTab} />;
+    return <SettingsPanel />;
   }
 
   if (!activeTab) {
@@ -99,6 +97,11 @@ export const MainContent: React.FC<MainContentProps> = ({
           setFileContent(newContent);
           if (activeTab.fileId) {
             await saveFileContent(activeTab.fileId, newContent);
+          }
+        }}
+        onClose={() => {
+          if (activeTab?.id) {
+            closeTab(activeTab.id);
           }
         }}
       />

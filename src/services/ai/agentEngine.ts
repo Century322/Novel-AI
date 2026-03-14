@@ -1,10 +1,13 @@
-import { llmService } from '../ai/llmService';
-import { ToolRegistry, createToolRegistry } from '../tools/toolRegistry';
+import { llmService, LLMMessage, ToolDefinition } from '../ai/llmService';
+import { LLMToolCall } from '@/types/core/llm';
+import { ToolRegistry } from '../tools/toolRegistry';
+import { createAggregatedToolRegistry } from '../tools/aggregated';
 import { ContextCompressionService } from '../knowledge/contextCompressionService';
 import { AuthorStyleLearningService } from '../style/authorStyleLearningService';
 import { MemoryService } from '../knowledge/memoryService';
 import { ExecutionController, createExecutionController, ExecutionState } from '../kernel';
 import { logger } from '../core/loggerService';
+import { DEFAULT_AGENT_MAX_ITERATIONS } from '@/store/agentStore';
 
 export interface AgentConfig {
   maxIterations: number;
@@ -36,20 +39,20 @@ export interface AgentState {
   tokensUsed: number;
   startTime: number;
   executionState?: ExecutionState;
+  terminationReason?: 'max_iterations' | 'final_answer' | 'error' | 'user_abort' | 'tool_loop';
 }
 
 export interface AgentAction {
-  type: 'tool_call' | 'response' | 'decompose' | 'plan_execute';
+  type: 'tool_call' | 'response' | 'continue';
   toolName?: string;
   toolArgs?: Record<string, unknown>;
   content?: string;
-  subtasks?: string[];
 }
 
 export interface AgentMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
-  toolCalls?: AgentToolCall[];
+  toolCalls?: LLMToolCall[];
   toolCallId?: string;
   timestamp: number;
 }
@@ -67,6 +70,8 @@ export interface AgentResult {
     name: string;
     args: Record<string, unknown>;
     result: unknown;
+    success: boolean;
+    error?: string;
   }>;
   iterations: number;
   tokensUsed: number;
@@ -77,6 +82,7 @@ export interface AgentResult {
     totalSteps: number;
     completedSteps: number;
   };
+  terminationReason?: 'max_iterations' | 'final_answer' | 'error' | 'user_abort' | 'tool_loop';
 }
 
 export interface TaskDecomposition {
@@ -91,28 +97,25 @@ export interface TaskDecomposition {
 }
 
 const DEFAULT_CONFIG: AgentConfig = {
-  maxIterations: 10,
+  maxIterations: DEFAULT_AGENT_MAX_ITERATIONS,
   maxTokens: 4096,
   temperature: 0.7,
-  systemPrompt: `你是一个专业的AI小说写作助手。你有以下能力：
+  systemPrompt: `你是一个专业的AI小说写作助手。
 
-1. **写作能力**：续写、修改、优化小说内容
-2. **分析能力**：分析人物、情节、风格、质量
-3. **管理能力**：管理人物档案、时间线、伏笔、世界观
-4. **学习能力**：学习作者的写作风格
+## 重要概念区分
+- **资料库/知识库**：用户上传的参考文档（如小说、设定、大纲等）
+- **文件系统**：项目的文件目录（章节文件、设定文件等）
 
-当用户给你任务时，请：
-1. 思考任务需要什么步骤
-2. 选择合适的工具执行
-3. 根据结果调整策略
-4. 给出最终回复
-
-你可以使用以下工具来完成复杂任务。请根据任务需要选择合适的工具。`,
+## 工作方式
+根据用户需求调用合适的工具完成任务。如果不需要调用工具，直接回答用户问题即可。`,
   enableTools: true,
   enableMemory: true,
   enableStyle: true,
   agentMode: true,
 };
+
+const MAX_CONTEXT_MESSAGES = 12;
+const MAX_SAME_TOOL_CALLS = 3;
 
 export class AgentEngine {
   private projectPath: string;
@@ -121,17 +124,19 @@ export class AgentEngine {
   private compressionService: ContextCompressionService | null = null;
   private styleService: AuthorStyleLearningService | null = null;
   private _memoryService: MemoryService | null = null;
+  private executionController: ExecutionController | null = null;
+  private state: AgentState;
+  private abortRequested: boolean = false;
+  private toolCallCounts: Map<string, number> = new Map();
 
   getMemoryService(): MemoryService | null {
     return this._memoryService;
   }
-  private executionController: ExecutionController | null = null;
-  private state: AgentState;
 
   constructor(projectPath: string = '', config: Partial<AgentConfig> = {}, externalToolRegistry?: ToolRegistry) {
     this.projectPath = projectPath || 'default';
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.toolRegistry = externalToolRegistry || createToolRegistry(this.projectPath);
+    this.toolRegistry = externalToolRegistry || createAggregatedToolRegistry(this.projectPath);
 
     this.state = {
       iteration: 0,
@@ -216,6 +221,9 @@ export class AgentEngine {
   }
 
   async run(userMessage: string, onProgress?: (state: AgentState) => void): Promise<AgentResult> {
+    this.abortRequested = false;
+    this.toolCallCounts.clear();
+    
     this.state = {
       iteration: 0,
       status: 'thinking',
@@ -227,262 +235,358 @@ export class AgentEngine {
       startTime: Date.now(),
     };
 
+    logger.info('[AgentEngine] 开始执行ReAct循环', { 
+      userMessage: userMessage.substring(0, 100),
+      maxIterations: this.config.maxIterations,
+      agentMode: this.config.agentMode 
+    });
+
     if (this.config.agentMode) {
-      return this.runWithPlanning(userMessage, onProgress);
+      return this.runReActLoop(userMessage, onProgress);
     } else {
-      return this.runSimple(userMessage, onProgress);
+      return this.runSimpleChat(userMessage, onProgress);
     }
   }
 
-  private async runWithPlanning(
-    userMessage: string,
-    _onProgress?: (state: AgentState) => void
+  private checkToolLoop(toolName: string): boolean {
+    const count = this.toolCallCounts.get(toolName) || 0;
+    if (count >= MAX_SAME_TOOL_CALLS) {
+      return true;
+    }
+    this.toolCallCounts.set(toolName, count + 1);
+    return false;
+  }
+
+  private async runReActLoop(
+    _userMessage: string,
+    onProgress?: (state: AgentState) => void
   ): Promise<AgentResult> {
-    logger.info('[AgentEngine] 使用规划模式执行', { userMessage });
+    const toolCalls: AgentResult['toolCalls'] = [];
+    const startTime = Date.now();
 
     try {
-      if (!this.executionController) {
-        throw new Error('执行控制器未初始化');
-      }
-
-      const execState = await this.executionController.execute(userMessage);
-
-      const plan = execState.plan
-        ? {
-            goal: execState.plan.goal,
-            totalSteps: execState.plan.metadata.totalSteps,
-            completedSteps: execState.plan.metadata.completedSteps,
-          }
-        : undefined;
-
-      let response = '';
-      if (execState.status === 'completed' && execState.plan) {
-        const completedSteps = execState.plan.steps.filter((s) => s.status === 'completed');
-        if (completedSteps.length > 0) {
-          const lastStep = completedSteps[completedSteps.length - 1];
-          if (
-            lastStep.output &&
-            typeof lastStep.output === 'object' &&
-            'content' in lastStep.output
-          ) {
-            response = String((lastStep.output as { content?: string }).content || '');
-          }
+      while (this.state.iteration < this.config.maxIterations) {
+        if (this.abortRequested) {
+          logger.info('[AgentEngine] 用户请求中止');
+          return this.createResult(toolCalls, startTime, 'user_abort', '用户中止');
         }
 
-        if (!response) {
-          response =
-            `任务完成！共执行 ${completedSteps.length} 个步骤。\n\n` +
-            completedSteps.map((s) => `- ${s.description}`).join('\n');
+        this.state.iteration++;
+        this.state.status = 'thinking';
+        onProgress?.(this.state);
+
+        logger.info(`[AgentEngine] ========== 迭代 ${this.state.iteration}/${this.config.maxIterations} ==========`);
+        logger.debug('[AgentEngine] 当前消息历史', { 
+          messageCount: this.state.messages.length,
+          lastMessageRole: this.state.messages[this.state.messages.length - 1]?.role 
+        });
+
+        const thought = await this.think();
+        this.state.currentThought = thought.content;
+
+        logger.info('[AgentEngine] LLM思考结果', {
+          contentPreview: thought.content.substring(0, 200),
+          hasToolCalls: !!(thought.toolCalls && thought.toolCalls.length > 0),
+          toolCallCount: thought.toolCalls?.length || 0,
+          toolCallNames: thought.toolCalls?.map(tc => tc.function.name) || []
+        });
+
+        if (thought.toolCalls && thought.toolCalls.length > 0) {
+          this.state.messages.push({
+            role: 'assistant',
+            content: thought.content,
+            toolCalls: thought.toolCalls,
+            timestamp: Date.now(),
+          });
+
+          for (const toolCall of thought.toolCalls) {
+            if (this.abortRequested) {
+              return this.createResult(toolCalls, startTime, 'user_abort', '用户中止');
+            }
+
+            const toolName = toolCall.function.name;
+            
+            if (this.checkToolLoop(toolName)) {
+              logger.warn('[AgentEngine] 检测到工具循环', { toolName, callCount: MAX_SAME_TOOL_CALLS });
+              return this.createResult(
+                toolCalls, 
+                startTime, 
+                'tool_loop', 
+                `检测到工具循环：${toolName} 已连续调用 ${MAX_SAME_TOOL_CALLS} 次。请尝试其他方法或直接回答用户。`
+              );
+            }
+
+            let toolArgs: Record<string, unknown> = {};
+            
+            try {
+              toolArgs = JSON.parse(toolCall.function.arguments);
+            } catch (parseError) {
+              logger.warn('[AgentEngine] 工具参数解析失败', { 
+                toolName, 
+                rawArgs: toolCall.function.arguments,
+                error: String(parseError)
+              });
+              toolArgs = {};
+            }
+
+            logger.info('[AgentEngine] >>> 执行工具', { toolName, args: toolArgs });
+
+            this.state.status = 'acting';
+            this.state.currentAction = {
+              type: 'tool_call',
+              toolName,
+              toolArgs,
+            };
+            onProgress?.(this.state);
+
+            const executionResult = await this.executeTool(toolName, toolArgs);
+            
+            const toolResult = {
+              name: toolName,
+              args: toolArgs,
+              result: executionResult.result,
+              success: !executionResult.error,
+              error: executionResult.error,
+            };
+            toolCalls.push(toolResult);
+
+            const resultPreview = typeof executionResult.result === 'string'
+              ? executionResult.result.substring(0, 300)
+              : JSON.stringify(executionResult.result).substring(0, 300);
+
+            logger.info('[AgentEngine] <<< 工具返回', { 
+              toolName, 
+              success: toolResult.success,
+              resultPreview,
+              error: executionResult.error
+            });
+
+            this.state.observations.push(
+              `[工具 ${toolName}] ${executionResult.error || resultPreview}`
+            );
+
+            const toolContent = executionResult.error 
+              ? `Tool error:\n${JSON.stringify({ error: executionResult.error }, null, 2)}`
+              : `Tool result:\n${JSON.stringify(executionResult.result, null, 2)}`;
+
+            this.state.messages.push({
+              role: 'tool',
+              content: toolContent,
+              toolCallId: toolCall.id,
+              timestamp: Date.now(),
+            });
+          }
+
+          this.state.status = 'observing';
+          onProgress?.(this.state);
+          
+          logger.info('[AgentEngine] 工具执行完成，继续下一轮迭代');
+          continue;
         }
-      } else if (execState.status === 'failed') {
-        response = `任务执行失败: ${execState.error || '未知错误'}`;
-      } else if (execState.status === 'cancelled') {
-        response = '任务已取消';
+
+        this.state.messages.push({
+          role: 'assistant',
+          content: thought.content,
+          timestamp: Date.now(),
+        });
+
+        logger.info('[AgentEngine] 无工具调用，视为最终回答，结束循环');
+        
+        this.state.status = 'responding';
+        onProgress?.(this.state);
+        
+        return this.createResult(
+          toolCalls, 
+          startTime, 
+          'final_answer', 
+          thought.content
+        );
       }
 
+      logger.info('[AgentEngine] 达到最大迭代次数', { 
+        iterations: this.state.iteration,
+        maxIterations: this.config.maxIterations 
+      });
+
+      const lastAssistantMessage = [...this.state.messages]
+        .reverse()
+        .find(m => m.role === 'assistant');
+
+      const response = lastAssistantMessage?.content || '任务执行完成，但未能生成最终回答。';
+      
+      return this.createResult(toolCalls, startTime, 'max_iterations', response);
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('[AgentEngine] 执行错误', { error: errorMessage, stack: (error as Error)?.stack });
+      
       return {
-        success: execState.status === 'completed',
-        response,
-        toolCalls:
-          execState.plan?.steps
-            .filter((s) => s.status === 'completed' && s.output)
-            .map((s) => ({
-              name: s.action,
-              args: s.input,
-              result: s.output,
-            })) || [],
-        iterations: execState.plan?.steps.length || 0,
+        success: false,
+        response: '',
+        toolCalls,
+        iterations: this.state.iteration,
         tokensUsed: this.state.tokensUsed,
-        duration: Date.now() - this.state.startTime,
-        error: execState.error || undefined,
-        plan,
+        duration: Date.now() - startTime,
+        error: errorMessage,
+        terminationReason: 'error',
+      };
+    }
+  }
+
+  private async runSimpleChat(
+    _userMessage: string,
+    onProgress?: (state: AgentState) => void
+  ): Promise<AgentResult> {
+    const startTime = Date.now();
+    
+    logger.info('[AgentEngine] 使用简单聊天模式');
+    
+    try {
+      const thought = await this.think();
+      
+      this.state.status = 'responding';
+      onProgress?.(this.state);
+      
+      return {
+        success: true,
+        response: thought.content,
+        toolCalls: [],
+        iterations: 1,
+        tokensUsed: this.state.tokensUsed,
+        duration: Date.now() - startTime,
+        terminationReason: 'final_answer',
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      logger.error('[AgentEngine] 规划执行失败', { error: errorMessage });
-
       return {
         success: false,
         response: '',
         toolCalls: [],
-        iterations: 0,
+        iterations: 1,
         tokensUsed: this.state.tokensUsed,
-        duration: Date.now() - this.state.startTime,
+        duration: Date.now() - startTime,
         error: errorMessage,
+        terminationReason: 'error',
       };
     }
   }
 
-  private async runSimple(
-    userMessage: string,
-    onProgress?: (state: AgentState) => void
-  ): Promise<AgentResult> {
-    logger.info('[AgentEngine] 使用简单模式执行', { userMessage });
+  private createResult(
+    toolCalls: AgentResult['toolCalls'],
+    startTime: number,
+    terminationReason: AgentResult['terminationReason'],
+    response: string
+  ): AgentResult {
+    const duration = Date.now() - startTime;
+    
+    this.state.terminationReason = terminationReason;
+    this.state.status = terminationReason === 'error' ? 'error' : 'completed';
 
-    const toolCalls: AgentResult['toolCalls'] = [];
+    logger.info('[AgentEngine] ========== 执行结束 ==========', {
+      terminationReason,
+      iterations: this.state.iteration,
+      toolCallsCount: toolCalls.length,
+      tokensUsed: this.state.tokensUsed,
+      duration: `${duration}ms`,
+      responseLength: response.length
+    });
 
-    try {
-      while (this.state.iteration < this.config.maxIterations) {
-        this.state.iteration++;
-        onProgress?.(this.state);
-
-        const thought = await this.think();
-        this.state.currentThought = thought;
-        this.state.status = 'acting';
-        onProgress?.(this.state);
-
-        const action = await this.decideAction(thought);
-        this.state.currentAction = action;
-
-        if (action.type === 'response') {
-          this.state.status = 'responding';
-          onProgress?.(this.state);
-
-          return {
-            success: true,
-            response: action.content || '',
-            toolCalls,
-            iterations: this.state.iteration,
-            tokensUsed: this.state.tokensUsed,
-            duration: Date.now() - this.state.startTime,
-          };
-        }
-
-        if (action.type === 'tool_call' && action.toolName) {
-          this.state.status = 'acting';
-          onProgress?.(this.state);
-
-          const result = await this.executeTool(action.toolName, action.toolArgs || {});
-
-          toolCalls.push({
-            name: action.toolName,
-            args: action.toolArgs || {},
-            result: result.result,
-          });
-
-          this.state.observations.push(
-            `工具 ${action.toolName} 返回: ${JSON.stringify(result.result).substring(0, 500)}`
-          );
-
-          this.state.messages.push({
-            role: 'tool',
-            content: JSON.stringify(result.result),
-            toolCallId: `call_${Date.now()}`,
-            timestamp: Date.now(),
-          });
-        }
-
-        this.state.status = 'observing';
-        onProgress?.(this.state);
-      }
-
-      return {
-        success: false,
-        response: '达到最大迭代次数，任务未完成',
-        toolCalls,
-        iterations: this.state.iteration,
-        tokensUsed: this.state.tokensUsed,
-        duration: Date.now() - this.state.startTime,
-        error: 'Max iterations reached',
-      };
-    } catch (error) {
-      return {
-        success: false,
-        response: '',
-        toolCalls,
-        iterations: this.state.iteration,
-        tokensUsed: this.state.tokensUsed,
-        duration: Date.now() - this.state.startTime,
-        error: String(error),
-      };
-    }
+    return {
+      success: terminationReason !== 'error' && terminationReason !== 'tool_loop',
+      response,
+      toolCalls,
+      iterations: this.state.iteration,
+      tokensUsed: this.state.tokensUsed,
+      duration,
+      terminationReason,
+      error: terminationReason === 'error' ? response : undefined,
+    };
   }
 
-  private async think(): Promise<string> {
+  private async think(): Promise<{ content: string; toolCalls?: LLMToolCall[] }> {
     const systemPrompt = await this.buildSystemPrompt();
 
-    const messages = [
-      { role: 'system' as const, content: systemPrompt },
-      ...this.state.messages.map((m) => ({
+    const history = this.state.messages.slice(-MAX_CONTEXT_MESSAGES);
+
+    const messages: LLMMessage[] = [
+      { role: 'system', content: systemPrompt },
+      ...history.map((m) => ({
         role: m.role as 'system' | 'user' | 'assistant' | 'tool',
         content: m.content,
+        toolCallId: m.toolCallId,
+        toolCalls: m.toolCalls,
       })),
     ];
+
+    const tools = this.getToolDefinitions();
+
+    logger.debug('[AgentEngine] 调用LLM', {
+      messageCount: messages.length,
+      historyCount: history.length,
+      toolCount: tools.length,
+      hasTools: tools.length > 0
+    });
 
     const response = await llmService.chat({
       messages,
       temperature: this.config.temperature,
       maxTokens: 1000,
+      tools: tools.length > 0 ? tools : undefined,
+      toolChoice: tools.length > 0 ? 'auto' : undefined,
     });
 
     this.state.tokensUsed += response.usage.totalTokens;
 
-    return response.content;
+    return {
+      content: response.content,
+      toolCalls: response.toolCalls,
+    };
   }
 
-  private async decideAction(thought: string): Promise<AgentAction> {
-    const toolPattern = /使用工具[：:]\s*(\w+)\s*\(([^)]*)\)/;
-    const match = thought.match(toolPattern);
-
-    if (match) {
-      const toolName = match[1];
-      let toolArgs: Record<string, unknown> = {};
-
-      try {
-        const argsStr = match[2].trim();
-        if (argsStr) {
-          toolArgs = JSON.parse(argsStr);
-        }
-      } catch {
-        toolArgs = { input: match[2] };
-      }
-
-      return {
-        type: 'tool_call',
-        toolName,
-        toolArgs,
-      };
-    }
-
-    const responsePattern = /最终回答[：:]\s*([\s\S]*)/;
-    const responseMatch = thought.match(responsePattern);
-
-    if (responseMatch) {
-      return {
-        type: 'response',
-        content: responseMatch[1].trim(),
-      };
-    }
-
-    if (thought.includes('完成') || thought.includes('任务结束')) {
-      return {
-        type: 'response',
-        content: thought,
-      };
-    }
-
-    return {
-      type: 'response',
-      content: thought,
-    };
+  private getToolDefinitions(): ToolDefinition[] {
+    const tools = this.toolRegistry.getAll();
+    return tools.map((tool) => ({
+      type: 'function' as const,
+      function: {
+        name: tool.definition.name,
+        description: tool.definition.description,
+        parameters: {
+          type: 'object',
+          properties: tool.definition.parameters,
+          required: tool.definition.required || [],
+        },
+      },
+    }));
   }
 
   private async executeTool(
     name: string,
     args: Record<string, unknown>
-  ): Promise<{ result: unknown }> {
+  ): Promise<{ result: unknown; error?: string }> {
     const tool = this.toolRegistry.get(name);
 
     if (!tool) {
-      return { result: { error: `工具 ${name} 不存在` } };
+      const error = `工具 "${name}" 不存在`;
+      logger.error('[AgentEngine] 工具不存在', { toolName: name });
+      return { result: null, error };
     }
 
-    const result = await this.toolRegistry.execute(
-      { id: `call_${Date.now()}`, name, arguments: args, status: 'pending', startTime: Date.now() },
-      { projectPath: this.projectPath, sessionId: 'default' }
-    );
+    try {
+      const result = await this.toolRegistry.execute(
+        { id: `call_${Date.now()}`, name, arguments: args, status: 'pending', startTime: Date.now() },
+        { projectPath: this.projectPath, sessionId: 'default' }
+      );
 
-    return { result: result.result };
+      if (!result.success) {
+        return { result: null, error: result.error || '工具执行失败' };
+      }
+
+      return { result: result.result };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      logger.error('[AgentEngine] 工具执行异常', { toolName: name, error: errorMessage });
+      return { result: null, error: errorMessage };
+    }
   }
 
   private async buildSystemPrompt(): Promise<string> {
@@ -515,36 +619,15 @@ export class AgentEngine {
         if (files.length > 10) {
           prompt += `... 还有 ${files.length - 10} 个文件\n`;
         }
-        prompt += '\n读取资料库内容的方法：\n';
-        prompt += '使用工具: get_knowledge_content({"filename": "文件名"})\n';
-        prompt += '使用工具: search_knowledge({"query": "关键词"})\n';
       }
     }
 
-    if (this.config.enableTools) {
-      const tools = this.toolRegistry.getDefinitions();
-      prompt += '\n\n## 可用工具\n';
-      for (const tool of tools) {
-        prompt += `\n### ${tool.name}\n${tool.description}\n`;
-        if (tool.parameters) {
-          prompt += '参数:\n';
-          for (const [key, param] of Object.entries(tool.parameters)) {
-            prompt += `- ${key}: ${param.description}\n`;
-          }
-        }
-      }
-
-      prompt += '\n## 使用工具的格式\n';
-      prompt += '使用工具: 工具名({"参数名": "参数值"})\n';
-    }
-
-    prompt += '\n\n## 当前任务\n';
-    prompt += '请分析用户的需求，思考需要执行的步骤，然后选择合适的工具执行或直接回答。\n';
-    prompt += '完成任务后，请以"最终回答："开头给出回复。\n';
-
+    prompt += '\n\n## 当前状态\n';
+    prompt += `迭代: ${this.state.iteration}/${this.config.maxIterations}\n`;
+    
     if (this.state.observations.length > 0) {
       prompt += '\n## 已执行的步骤\n';
-      for (const obs of this.state.observations) {
+      for (const obs of this.state.observations.slice(-5)) {
         prompt += `- ${obs}\n`;
       }
     }
@@ -567,10 +650,11 @@ export class AgentEngine {
   }
 
   cancel(): void {
+    this.abortRequested = true;
     if (this.executionController) {
       this.executionController.cancel();
-      logger.info('[AgentEngine] 执行已取消');
     }
+    logger.info('[AgentEngine] 执行已取消');
   }
 
   getExecutionState(): ExecutionState | null {

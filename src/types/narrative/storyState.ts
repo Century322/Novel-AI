@@ -26,12 +26,12 @@ export interface CharacterState {
 export interface RelationshipState {
   targetId: string;
   targetName: string;
-  type: RelationshipType;
+  type: StoryRelationshipType;
   strength: number;
   lastInteraction?: number;
 }
 
-export type RelationshipType =
+export type StoryRelationshipType =
   | 'family'
   | 'friend'
   | 'enemy'

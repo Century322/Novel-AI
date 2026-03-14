@@ -2,7 +2,8 @@ import { logger } from '../core/loggerService';
 import { workshopService } from '../core/workshopService';
 import { TaskGraph, createTaskGraph } from './TaskGraph';
 import { planner } from './Planner';
-import { ToolRegistry, createToolRegistry } from '../tools/toolRegistry';
+import { ToolRegistry } from '../tools/toolRegistry';
+import { createAggregatedToolRegistry } from '../tools/aggregated';
 import { llmService } from '../ai/llmService';
 import { MemoryService } from '../knowledge/memoryService';
 import { ContextCompressionService } from '../knowledge/contextCompressionService';
@@ -64,22 +65,19 @@ export class ExecutionController {
 
   constructor(projectPath: string) {
     this.projectPath = projectPath;
-    this.toolRegistry = createToolRegistry(projectPath);
+    this.toolRegistry = createAggregatedToolRegistry(projectPath);
   }
 
   setMemoryService(service: MemoryService): void {
     this.memoryService = service;
-    this.toolRegistry.setMemoryService(service);
   }
 
   setCompressionService(service: ContextCompressionService): void {
     this.compressionService = service;
-    this.toolRegistry.setCompressionService(service);
   }
 
   setStyleService(service: AuthorStyleLearningService): void {
     this.styleService = service;
-    this.toolRegistry.setStyleService(service);
   }
 
   setCallbacks(callbacks: ExecutionCallbacks): void {
@@ -508,8 +506,8 @@ ${instructions}
     const result = await this.toolRegistry.execute(
       {
         id: 'analyze',
-        name: 'analyze_content',
-        arguments: { content },
+        name: 'story_analysis',
+        arguments: { type: 'structure', text: content },
         status: 'pending',
         startTime: Date.now(),
       },
@@ -523,8 +521,8 @@ ${instructions}
     const result = await this.toolRegistry.execute(
       {
         id: 'check',
-        name: 'detect_conflicts',
-        arguments: step.input,
+        name: 'story_analysis',
+        arguments: { type: 'consistency', text: step.input.content as string || '', scope: 'chapter' },
         status: 'pending',
         startTime: Date.now(),
       },
@@ -540,8 +538,8 @@ ${instructions}
     const result = await this.toolRegistry.execute(
       {
         id: 'learn',
-        name: 'learn_style',
-        arguments: { content },
+        name: 'style_ops',
+        arguments: { action: 'learn', text: content },
         status: 'pending',
         startTime: Date.now(),
       },

@@ -73,10 +73,17 @@ class IndexedDBService {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction(['projects'], 'readwrite');
       const store = transaction.objectStore('projects');
-      store.add(project);
+      const request = store.put(project);
 
-      transaction.oncomplete = () => resolve(project);
-      transaction.onerror = () => reject(new Error('Failed to create project'));
+      request.onsuccess = () => resolve(project);
+      request.onerror = (event) => {
+        const error = (event.target as IDBRequest).error;
+        reject(new Error(`Failed to create project: ${error?.message || 'unknown error'}`));
+      };
+      transaction.onerror = (event) => {
+        const error = (event.target as IDBTransaction).error;
+        reject(new Error(`Transaction failed: ${error?.message || 'unknown error'}`));
+      };
     });
   }
 

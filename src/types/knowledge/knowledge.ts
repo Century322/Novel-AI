@@ -104,20 +104,20 @@ export interface CharacterMemory {
   role: 'protagonist' | 'antagonist' | 'supporting' | 'minor';
   description: string;
   traits: string[];
-  relationships: CharacterRelationship[];
+  relationships: CharacterRelationshipMemory[];
   firstAppear: string;
   lastMention: string;
-  arc: CharacterArc[];
+  arc: CharacterArcMemory[];
 }
 
-export interface CharacterRelationship {
+export interface CharacterRelationshipMemory {
   targetId: string;
   targetName: string;
   type: string;
   description?: string;
 }
 
-export interface CharacterArc {
+export interface CharacterArcMemory {
   chapter: string;
   event: string;
   development: string;

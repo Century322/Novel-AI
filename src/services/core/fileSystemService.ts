@@ -1,4 +1,5 @@
 import { indexedDBService } from '@/services/web/indexedDBService';
+import { logger } from '@/services/core/loggerService';
 
 export interface FileInfo {
   name: string;
@@ -10,30 +11,66 @@ export interface FileInfo {
 const DEFAULT_STORAGE_ID = 'default_storage';
 
 let initialized = false;
+let cacheVersion = 0;
+let dbVersion = 0;
 let cachedFiles: Map<string, { content: string; type: 'file' | 'directory' }> = new Map();
+let refreshPromise: Promise<void> | null = null;
 
 async function ensureInitialized(): Promise<void> {
   if (initialized) return;
   
-  const existingFiles = await indexedDBService.getProjectFiles(DEFAULT_STORAGE_ID);
-  if (existingFiles.length === 0) {
-    await indexedDBService.createProject(DEFAULT_STORAGE_ID, '文件存储');
-  }
-  
-  for (const file of existingFiles) {
-    if (!cachedFiles.has(file.path)) {
-      cachedFiles.set(file.path, { content: file.content, type: file.type || 'file' });
+  try {
+    const existingProject = await indexedDBService.getProject(DEFAULT_STORAGE_ID);
+    if (!existingProject) {
+      try {
+        await indexedDBService.createProject(DEFAULT_STORAGE_ID, '文件存储');
+      } catch (createError) {
+        logger.warn('项目可能已存在，继续加载', { error: createError });
+      }
     }
+    
+    const existingFiles = await indexedDBService.getProjectFiles(DEFAULT_STORAGE_ID);
+    for (const file of existingFiles) {
+      if (!cachedFiles.has(file.path)) {
+        cachedFiles.set(file.path, { content: file.content, type: file.type || 'file' });
+      }
+    }
+    cacheVersion++;
+    dbVersion = cacheVersion;
+    initialized = true;
+  } catch (error) {
+    logger.error('初始化文件系统失败', { error });
+    initialized = true;
   }
-  initialized = true;
 }
 
-async function refreshCache(): Promise<void> {
-  const existingFiles = await indexedDBService.getProjectFiles(DEFAULT_STORAGE_ID);
-  cachedFiles.clear();
-  for (const file of existingFiles) {
-    cachedFiles.set(file.path, { content: file.content, type: file.type || 'file' });
+async function refreshCache(force: boolean = false): Promise<void> {
+  if (!force && cacheVersion === dbVersion) {
+    return;
   }
+  
+  if (refreshPromise) {
+    return refreshPromise;
+  }
+  
+  refreshPromise = (async () => {
+    try {
+      const existingFiles = await indexedDBService.getProjectFiles(DEFAULT_STORAGE_ID);
+      cachedFiles.clear();
+      for (const file of existingFiles) {
+        cachedFiles.set(file.path, { content: file.content, type: file.type || 'file' });
+      }
+      cacheVersion = dbVersion;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+  
+  return refreshPromise;
+}
+
+function invalidateCache(): void {
+  dbVersion++;
 }
 
 export const fileSystemService = {
@@ -140,39 +177,64 @@ export const fileSystemService = {
 
   async readFile(path: string): Promise<string> {
     await ensureInitialized();
-    await refreshCache();
     const file = cachedFiles.get(path);
-    return file?.content || '';
+    if (file) {
+      return file.content;
+    }
+    await refreshCache(true);
+    const refreshedFile = cachedFiles.get(path);
+    return refreshedFile?.content || '';
   },
 
   async writeFile(path: string, content: string): Promise<void> {
     await ensureInitialized();
+    
+    const parts = path.split('/').filter(Boolean);
+    if (parts.length > 1) {
+      const dirPath = parts.slice(0, -1).join('/');
+      if (!cachedFiles.has(dirPath)) {
+        await this.createDirectory(dirPath);
+      }
+    }
+    
     const existing = cachedFiles.has(path);
     if (existing) {
       await indexedDBService.updateFile(path, content);
-      cachedFiles.set(path, { content, type: 'file' });
     } else {
       await indexedDBService.createFile(DEFAULT_STORAGE_ID, path, content, 'file');
-      cachedFiles.set(path, { content, type: 'file' });
     }
+    cachedFiles.set(path, { content, type: 'file' });
+    invalidateCache();
   },
 
   async createFile(path: string, content: string = ''): Promise<void> {
     await ensureInitialized();
+    
+    const parts = path.split('/').filter(Boolean);
+    if (parts.length > 1) {
+      const dirPath = parts.slice(0, -1).join('/');
+      if (!cachedFiles.has(dirPath)) {
+        await this.createDirectory(dirPath);
+      }
+    }
+    
     await indexedDBService.createFile(DEFAULT_STORAGE_ID, path, content, 'file');
     cachedFiles.set(path, { content, type: 'file' });
+    invalidateCache();
   },
 
   async createDirectory(path: string): Promise<void> {
     await ensureInitialized();
     await indexedDBService.createFile(DEFAULT_STORAGE_ID, path, '', 'directory');
     cachedFiles.set(path, { content: '', type: 'directory' });
+    invalidateCache();
   },
 
   async deleteFile(path: string): Promise<void> {
     await ensureInitialized();
     await indexedDBService.deleteFile(path);
     cachedFiles.delete(path);
+    invalidateCache();
   },
 
   async deleteDirectory(path: string): Promise<void> {
@@ -187,6 +249,7 @@ export const fileSystemService = {
       await indexedDBService.deleteFile(filePath);
       cachedFiles.delete(filePath);
     }
+    invalidateCache();
   },
 
   async renameFile(oldPath: string, newPath: string): Promise<void> {
@@ -197,6 +260,7 @@ export const fileSystemService = {
       await indexedDBService.deleteFile(oldPath);
       cachedFiles.delete(oldPath);
       cachedFiles.set(newPath, file);
+      invalidateCache();
     }
   },
 
@@ -221,6 +285,7 @@ export const fileSystemService = {
     const path = file.name;
     await indexedDBService.createFile(DEFAULT_STORAGE_ID, path, content);
     cachedFiles.set(path, { content, type: 'file' });
+    invalidateCache();
   },
 
   async importFromJson(file: File): Promise<void> {
@@ -233,6 +298,7 @@ export const fileSystemService = {
         await indexedDBService.createFile(DEFAULT_STORAGE_ID, f.path, f.content || '');
         cachedFiles.set(f.path, { content: f.content || '', type: f.type || 'file' });
       }
+      invalidateCache();
     }
   },
 
@@ -243,6 +309,11 @@ export const fileSystemService = {
   getProjectName(): string {
     return '文件存储';
   },
+
+  async forceRefresh(): Promise<void> {
+    await ensureInitialized();
+    await refreshCache(true);
+  },
 };
 
 export function isFileSystemAccessSupported(): boolean {
@@ -251,4 +322,21 @@ export function isFileSystemAccessSupported(): boolean {
 
 export function getStorageModeName(): string {
   return '浏览器存储';
+}
+
+export function getStorageMode(): 'indexeddb' | 'filesystem' {
+  return 'indexeddb';
+}
+
+export async function exportProject(): Promise<Blob | null> {
+  return await fileSystemService.exportAll();
+}
+
+export async function importProject(file: File): Promise<string | null> {
+  await fileSystemService.importFromJson(file);
+  return DEFAULT_STORAGE_ID;
+}
+
+export async function openProjectDialog(): Promise<string | null> {
+  return null;
 }

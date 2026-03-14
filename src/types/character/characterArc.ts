@@ -40,8 +40,8 @@ export interface CharacterArc {
 
   stages: ArcStage[];
 
-  startingState: CharacterState;
-  endingState: CharacterState;
+  startingState: CharacterInnerState;
+  endingState: CharacterInnerState;
 
   keyDecisions: Array<{
     stageId: string;
@@ -81,7 +81,7 @@ export interface ArcStage {
   notes: string;
 }
 
-export interface CharacterState {
+export interface CharacterInnerState {
   beliefs: string[];
   values: string[];
   fears: string[];

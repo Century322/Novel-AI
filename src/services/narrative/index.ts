@@ -11,5 +11,5 @@ export type {
   WorldContext,
   IndexContentOptions,
 } from './narrativeEngine';
-export type { ConsistencyIssue } from './consistencyChecker';
+export type { NarrativeConsistencyIssue } from './consistencyChecker';
 export type { WritingContext, NarrativeContextResult } from './narrativeContextService';

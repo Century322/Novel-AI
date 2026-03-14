@@ -5,7 +5,7 @@ import {
   WORKSHOP_DIRS,
   SkillManifest,
   AgentManifest,
-  MemoryEntry,
+  WorkshopMemoryEntry,
   KnowledgeIndex,
 } from '@/types/core/workshop';
 import { fileSystemService } from './fileSystemService';
@@ -103,35 +103,49 @@ export const workshopService = {
     }
   },
 
-  async loadMemory(): Promise<MemoryEntry[]> {
+  async loadMemory(): Promise<WorkshopMemoryEntry[]> {
     try {
+      const exists = await this.pathExists(MEMORY_FILE);
+      if (!exists) {
+        await this.initMemory();
+        logger.info('记忆文件不存在，已初始化空文件');
+        return [];
+      }
       const content = await this.readFile(MEMORY_FILE);
+      if (!content || content.trim() === '') {
+        await this.initMemory();
+        logger.info('记忆文件为空，已重新初始化');
+        return [];
+      }
       const data = JSON.parse(content);
-      return data.entries || [];
-    } catch {
+      const entries = data.entries || [];
+      logger.info('加载记忆数据', { count: entries.length });
+      return entries;
+    } catch (error) {
+      logger.warn('加载记忆数据失败，重新初始化', { error: String(error) });
+      await this.initMemory();
       return [];
     }
   },
 
-  async saveMemory(entries: MemoryEntry[]): Promise<void> {
-    await this.writeFile(
-      MEMORY_FILE,
-      JSON.stringify(
-        {
-          entries,
-          lastUpdated: Date.now(),
-        },
-        null,
-        2
-      )
+  async saveMemory(entries: WorkshopMemoryEntry[]): Promise<void> {
+    const content = JSON.stringify(
+      {
+        entries,
+        lastUpdated: Date.now(),
+      },
+      null,
+      2
     );
+    await this.writeFile(MEMORY_FILE, content);
+    logger.info('保存记忆数据成功', { count: entries.length });
   },
 
   async addMemoryEntry(
-    entry: Omit<MemoryEntry, 'id' | 'createdAt' | 'updatedAt' | 'accessCount'>
-  ): Promise<MemoryEntry> {
+    entry: Omit<WorkshopMemoryEntry, 'id' | 'createdAt' | 'updatedAt' | 'accessCount'>
+  ): Promise<WorkshopMemoryEntry> {
     const entries = await this.loadMemory();
-    const newEntry: MemoryEntry = {
+    const newEntry: WorkshopMemoryEntry = {
       ...entry,
       id: generateId(),
       createdAt: Date.now(),
@@ -143,7 +157,7 @@ export const workshopService = {
     return newEntry;
   },
 
-  async updateMemoryEntry(id: string, updates: Partial<MemoryEntry>): Promise<boolean> {
+  async updateMemoryEntry(id: string, updates: Partial<WorkshopMemoryEntry>): Promise<boolean> {
     const entries = await this.loadMemory();
     const index = entries.findIndex((e) => e.id === id);
     if (index === -1) {
@@ -161,11 +175,14 @@ export const workshopService = {
 
   async deleteMemoryEntry(id: string): Promise<boolean> {
     const entries = await this.loadMemory();
+    const originalLength = entries.length;
     const filtered = entries.filter((e) => e.id !== id);
-    if (filtered.length === entries.length) {
+    if (filtered.length === originalLength) {
+      logger.warn('删除记忆失败: 未找到对应ID', { id, totalEntries: originalLength });
       return false;
     }
     await this.saveMemory(filtered);
+    logger.info('记忆删除成功', { id, remainingEntries: filtered.length });
     return true;
   },
 

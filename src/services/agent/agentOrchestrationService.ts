@@ -50,7 +50,7 @@ export interface WorkflowPlan {
   updatedAt: number;
 }
 
-export interface WritingContext {
+export interface OrchestrationWritingContext {
   characters: Array<{
     name: string;
     role: string;
@@ -384,8 +384,8 @@ export class AgentOrchestrationService {
     return { content: response.content, chapterNumber };
   }
 
-  async buildWritingContext(chapterNumber: number): Promise<WritingContext> {
-    const context: WritingContext = {
+  async buildWritingContext(chapterNumber: number): Promise<OrchestrationWritingContext> {
+    const context: OrchestrationWritingContext = {
       characters: [],
       timeline: [],
       foreshadowing: [],
@@ -460,7 +460,7 @@ export class AgentOrchestrationService {
     return context;
   }
 
-  private buildChapterPrompt(context: WritingContext, params: Record<string, unknown>): string {
+  private buildChapterPrompt(context: OrchestrationWritingContext, params: Record<string, unknown>): string {
     const parts: string[] = [];
 
     parts.push(`## 当前任务：撰写第 ${context.outline.currentChapter} 章\n`);

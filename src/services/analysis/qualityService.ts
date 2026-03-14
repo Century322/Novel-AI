@@ -1,6 +1,6 @@
 import { workshopService } from '../core/workshopService';
 import {
-  QualityAssessment,
+  QualityCheckResult,
   QualityDimension,
   QualityIssue,
   IssueType,
@@ -23,14 +23,14 @@ export class QualityService {
   async assessContent(
     content: string,
     context: AssessmentContext = { characters: [] }
-  ): Promise<QualityAssessment> {
+  ): Promise<QualityCheckResult> {
     const dimensions = await this.assessDimensions(content, context);
     const issues = await this.detectIssues(content, context);
     const suggestions = this.generateSuggestions(issues);
 
     const overallScore = this.calculateOverallScore(dimensions);
 
-    const assessment: QualityAssessment = {
+    const assessment: QualityCheckResult = {
       id: generateId(),
       content: content.substring(0, 500),
       timestamp: Date.now(),
@@ -696,12 +696,12 @@ export class QualityService {
     return weightedScore / Math.max(totalWeight, 1);
   }
 
-  private async saveAssessment(assessment: QualityAssessment): Promise<void> {
+  private async saveAssessment(assessment: QualityCheckResult): Promise<void> {
     const assessmentPath = `${this.projectPath}/.ai-workshop/quality/assessments/${assessment.id}.json`;
     await workshopService.writeFile(assessmentPath, JSON.stringify(assessment, null, 2));
   }
 
-  async loadAssessment(assessmentId: string): Promise<QualityAssessment | null> {
+  async loadAssessment(assessmentId: string): Promise<QualityCheckResult | null> {
     const assessmentPath = `${this.projectPath}/.ai-workshop/quality/assessments/${assessmentId}.json`;
 
     if (await workshopService.pathExists(assessmentPath)) {
@@ -712,7 +712,7 @@ export class QualityService {
     return null;
   }
 
-  async getAssessmentHistory(limit: number = 20): Promise<QualityAssessment[]> {
+  async getAssessmentHistory(limit: number = 20): Promise<QualityCheckResult[]> {
     const assessmentsPath = `${this.projectPath}/.ai-workshop/quality/assessments`;
 
     if (!(await workshopService.pathExists(assessmentsPath))) {
@@ -720,7 +720,7 @@ export class QualityService {
     }
 
     const files = await workshopService.readDirectory(assessmentsPath);
-    const assessments: QualityAssessment[] = [];
+    const assessments: QualityCheckResult[] = [];
 
     for (const file of files.slice(0, limit)) {
       if (file.name.endsWith('.json')) {

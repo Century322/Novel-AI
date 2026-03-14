@@ -5,6 +5,7 @@ import { useFileTreeFromProject } from '@/store/fileStore';
 import { cn } from '@/lib/utils';
 import { FileNode } from '@/types/core/types';
 import { FileText, FolderOpen, RefreshCw, Download, Upload, PanelRight } from 'lucide-react';
+import { logger } from '@/services/core/loggerService';
 
 interface FileTreePanelProps {
   width: number;
@@ -68,7 +69,7 @@ export const FileTreePanel: React.FC<FileTreePanelProps> = ({ width, onDragStart
       }
       await refreshFileTree();
     } catch (error) {
-      console.error('创建失败:', error);
+      logger.error('创建失败', { error });
     }
   };
 

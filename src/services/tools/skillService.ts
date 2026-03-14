@@ -701,7 +701,7 @@ export const skillService = {
   },
 
   async pathExists(path: string): Promise<boolean> {
-    return await fileSystemService.fileExists(normalizePath(path));
+    return await fileSystemService.pathExists(normalizePath(path));
   },
 
   async createDirectory(path: string): Promise<void> {

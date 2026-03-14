@@ -78,7 +78,8 @@ const encryptedStorage: PersistStorage<ApiKeyStore> = {
         };
       }
       return parsed;
-    } catch {
+    } catch (error) {
+      console.error('解密API密钥存储失败:', error);
       return null;
     }
   },
@@ -103,8 +104,9 @@ const encryptedStorage: PersistStorage<ApiKeyStore> = {
         );
         return;
       }
-    } catch {
-      // If parsing fails, store as-is
+    } catch (error) {
+      console.error('加密API密钥存储失败:', error);
+      throw new Error('无法安全存储API密钥');
     }
     localStorage.setItem(name, JSON.stringify(value));
   },

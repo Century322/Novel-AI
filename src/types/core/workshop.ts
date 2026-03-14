@@ -99,9 +99,9 @@ export interface ToolParameter {
   default?: unknown;
 }
 
-export interface MemoryEntry {
+export interface WorkshopMemoryEntry {
   id: string;
-  type: MemoryType;
+  type: WorkshopMemoryType;
   content: string;
   metadata: Record<string, unknown>;
   createdAt: number;
@@ -110,7 +110,7 @@ export interface MemoryEntry {
   relevanceScore: number;
 }
 
-export type MemoryType =
+export type WorkshopMemoryType =
   | 'character'
   | 'timeline'
   | 'foreshadowing'

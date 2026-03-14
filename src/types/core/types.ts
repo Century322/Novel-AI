@@ -7,7 +7,7 @@ export interface FileNode {
   isOpen?: boolean;
 }
 
-export interface AgentConfig {
+export interface SimpleAgentConfig {
   enabled: boolean;
   maxIterations: number;
 }
@@ -212,7 +212,7 @@ export interface ProjectState {
   currentSessionId: string;
   selectedFileId: string | null;
   isProcessing: boolean;
-  agentConfig?: AgentConfig;
+  agentConfig?: SimpleAgentConfig;
   tasks: Task[];
 }
 
@@ -234,17 +234,6 @@ export interface AIModel {
   contextLength: number;
   supportsStreaming: boolean;
   supportsVision: boolean;
-}
-
-export interface Notification {
-  id: string;
-  type: 'success' | 'error' | 'warning' | 'info' | 'task_complete';
-  title: string;
-  message: string;
-  timestamp: number;
-  read?: boolean;
-  sessionId?: string;
-  sessionName?: string;
 }
 
 export type AIProvider =

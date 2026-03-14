@@ -95,35 +95,6 @@ export const WorldPanel: React.FC = () => {
     );
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-zinc-500">
-        <RefreshCw size={24} className="animate-spin mr-2" />
-        加载世界模型...
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 gap-2">
-        <AlertCircle size={32} className="text-red-400" />
-        <p className="text-sm text-red-400">加载失败</p>
-        <p className="text-xs text-zinc-600">{error}</p>
-      </div>
-    );
-  }
-
-  if (!worldModel) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center text-zinc-500 gap-2">
-        <Globe size={32} className="opacity-50" />
-        <p className="text-sm">未找到世界模型数据</p>
-        <p className="text-xs text-zinc-600">请使用"世界构建"功能创建</p>
-      </div>
-    );
-  }
-
   const tabs: { id: TabType; label: string; icon: React.ReactNode; count: number }[] = [
     { id: 'characters', label: '人物', icon: <Users size={16} />, count: worldModel.characters.items.length },
     { id: 'locations', label: '地点', icon: <MapPin size={16} />, count: worldModel.worldbuilding.locations.length },

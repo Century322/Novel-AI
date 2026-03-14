@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { Download, Upload, FolderOpen, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { fileSystemService, getStorageModeName } from '@/services/core/fileSystemService';
+import { getStorageModeName, getStorageMode, exportProject, importProject, openProjectDialog } from '@/services/core/fileSystemService';
 import { browserCapabilities } from '@/services/web/browserDetect';
 import { logger } from '@/services/core/loggerService';
 
@@ -18,7 +18,7 @@ export const ProjectImportExport: React.FC<ProjectImportExportProps> = ({
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const storageMode = fileSystemService.getStorageMode();
+  const storageMode = getStorageMode();
   const isIndexedDB = storageMode === 'indexeddb';
   const supportsFileSystem = browserCapabilities.supportsFileSystemAccess;
 
@@ -27,7 +27,7 @@ export const ProjectImportExport: React.FC<ProjectImportExportProps> = ({
     setMessage(null);
 
     try {
-      const blob = await fileSystemService.exportProject();
+      const blob = await exportProject();
       if (!blob) {
         setMessage({ type: 'error', text: '导出失败：没有可导出的项目' });
         return;
@@ -60,7 +60,7 @@ export const ProjectImportExport: React.FC<ProjectImportExportProps> = ({
     setMessage(null);
 
     try {
-      const projectId = await fileSystemService.importProject(file);
+      const projectId = await importProject(file);
       if (!projectId) {
         setMessage({ type: 'error', text: '导入失败：无法解析项目文件' });
         return;
@@ -82,7 +82,7 @@ export const ProjectImportExport: React.FC<ProjectImportExportProps> = ({
 
   const handleOpenFolder = async () => {
     try {
-      const path = await fileSystemService.openProjectDialog();
+      const path = await openProjectDialog();
       if (path) {
         setMessage({ type: 'success', text: `已打开项目: ${path}` });
         onProjectChange?.();

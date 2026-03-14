@@ -66,6 +66,8 @@ export const TerminalPanel: React.FC = () => {
 
   const problemStats = getProblemStats();
 
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+
   const tabs: { id: PanelTab; label: string; icon: React.ReactNode; badge?: number }[] = [
     { id: 'logs', label: '日志', icon: <ScrollText size={16} />, badge: logs.length },
     { id: 'output', label: '输出', icon: <FileText size={16} />, badge: outputs.length },
@@ -201,8 +203,8 @@ export const TerminalPanel: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-transparent">
-      <div className="flex items-center justify-between px-4 py-2 border-b shrink-0 border-white/5 bg-black/20">
+    <div className="flex flex-col h-full bg-[#1e1e1e]">
+      <div className="flex items-center justify-between px-4 py-2 shrink-0 bg-zinc-800/30">
         <div className="flex items-center gap-1">
           {tabs.map((tab) => (
             <button
@@ -216,7 +218,7 @@ export const TerminalPanel: React.FC = () => {
               )}
             >
               {tab.icon}
-              <span>{tab.label}</span>
+              {!isMobile && <span>{tab.label}</span>}
               {tab.badge !== undefined && tab.badge > 0 && (
                 <span
                   className={cn(
@@ -232,16 +234,31 @@ export const TerminalPanel: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-black/20 border border-white/10">
-            <Search size={14} className="text-zinc-500" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="搜索..."
-              className="bg-transparent border-none outline-none text-sm w-32 text-zinc-300 placeholder:text-zinc-500"
-            />
-          </div>
+          {!isMobile && (
+            <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-700/50 border border-white/10">
+              <Search size={14} className="text-zinc-500" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="搜索..."
+                className="bg-transparent border-none outline-none text-sm w-32 text-zinc-300 placeholder:text-zinc-500"
+              />
+            </div>
+          )}
+
+          {isMobile && (
+            <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-zinc-700/50 border border-white/10">
+              <Search size={14} className="text-zinc-500" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="搜索..."
+                className="bg-transparent border-none outline-none text-sm w-20 text-zinc-300 placeholder:text-zinc-500"
+              />
+            </div>
+          )}
 
           <button
             onClick={() => setShowFilters(!showFilters)}
@@ -249,33 +266,35 @@ export const TerminalPanel: React.FC = () => {
               'flex items-center gap-1 px-2 py-1 rounded-lg text-sm transition-colors',
               showFilters ? 'bg-blue-500 text-white' : 'hover:bg-white/5 text-zinc-400'
             )}
+            title="过滤"
           >
             <Filter size={14} />
-            过滤
+            {!isMobile && '过滤'}
           </button>
 
           <button
             onClick={handleExport}
             className="flex items-center gap-1 px-2 py-1 rounded-lg text-sm transition-colors hover:bg-white/5 text-zinc-400"
+            title="导出"
           >
             <Download size={14} />
-            导出
+            {!isMobile && '导出'}
           </button>
         </div>
       </div>
 
       {showFilters && (
-        <div className="px-4 py-2 border-b shrink-0 border-white/5 bg-black/10">
+          <div className="px-4 py-2 border-b shrink-0 border-white/5 bg-zinc-800/20">
           {activeTab === 'logs' && (
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               <div className="flex items-center gap-2">
-                <span className="text-xs text-zinc-400">级别:</span>
+                {!isMobile && <span className="text-xs text-zinc-400">级别:</span>}
                 <select
                   value={filters.logLevel}
                   onChange={(e) =>
                     setFilters((f) => ({ ...f, logLevel: e.target.value as LogLevel | 'all' }))
                   }
-                  className="px-2 py-1 rounded text-xs bg-black/20 border border-white/10 text-zinc-300"
+                  className="px-2 py-1 rounded text-xs bg-zinc-700/50 border border-white/10 text-zinc-300"
                 >
                   <option value="all">全部</option>
                   {Object.entries(LOG_LEVEL_LABELS).map(([key, label]) => (
@@ -286,13 +305,13 @@ export const TerminalPanel: React.FC = () => {
                 </select>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-zinc-400">来源:</span>
+                {!isMobile && <span className="text-xs text-zinc-400">来源:</span>}
                 <select
                   value={filters.logSource}
                   onChange={(e) =>
                     setFilters((f) => ({ ...f, logSource: e.target.value as LogSource | 'all' }))
                   }
-                  className="px-2 py-1 rounded text-xs bg-black/20 border border-white/10 text-zinc-300"
+                  className="px-2 py-1 rounded text-xs bg-zinc-700/50 border border-white/10 text-zinc-300"
                 >
                   <option value="all">全部</option>
                   {Object.entries(LOG_SOURCE_LABELS).map(([key, label]) => (
@@ -307,7 +326,7 @@ export const TerminalPanel: React.FC = () => {
                 className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors text-red-500 hover:bg-red-500/10"
               >
                 <Trash2 size={12} />
-                清空日志
+                {!isMobile && '清空日志'}
               </button>
             </div>
           )}
@@ -319,15 +338,15 @@ export const TerminalPanel: React.FC = () => {
                 className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors text-red-500 hover:bg-red-500/10"
               >
                 <Trash2 size={12} />
-                清空输出
+                {!isMobile && '清空输出'}
               </button>
             </div>
           )}
 
           {activeTab === 'problems' && (
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               <div className="flex items-center gap-2">
-                <span className="text-xs text-zinc-400">类型:</span>
+                {!isMobile && <span className="text-xs text-zinc-400">类型:</span>}
                 <select
                   value={filters.problemType}
                   onChange={(e) =>
@@ -336,7 +355,7 @@ export const TerminalPanel: React.FC = () => {
                       problemType: e.target.value as NovelProblem['type'] | 'all',
                     }))
                   }
-                  className="px-2 py-1 rounded text-xs bg-black/20 border border-white/10 text-zinc-300"
+                  className="px-2 py-1 rounded text-xs bg-zinc-700/50 border border-white/10 text-zinc-300"
                 >
                   <option value="all">全部</option>
                   {Object.entries(PROBLEM_TYPE_LABELS).map(([key, label]) => (
@@ -347,7 +366,7 @@ export const TerminalPanel: React.FC = () => {
                 </select>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-xs text-zinc-400">严重程度:</span>
+                {!isMobile && <span className="text-xs text-zinc-400">严重程度:</span>}
                 <select
                   value={filters.problemSeverity}
                   onChange={(e) =>
@@ -356,7 +375,7 @@ export const TerminalPanel: React.FC = () => {
                       problemSeverity: e.target.value as NovelProblem['severity'] | 'all',
                     }))
                   }
-                  className="px-2 py-1 rounded text-xs bg-black/20 border border-white/10 text-zinc-300"
+                  className="px-2 py-1 rounded text-xs bg-zinc-700/50 border border-white/10 text-zinc-300"
                 >
                   <option value="all">全部</option>
                   {Object.entries(PROBLEM_SEVERITY_LABELS).map(([key, label]) => (
@@ -373,14 +392,14 @@ export const TerminalPanel: React.FC = () => {
                   onChange={(e) => setFilters((f) => ({ ...f, showResolved: e.target.checked }))}
                   className="rounded"
                 />
-                <span className="text-xs text-zinc-400">显示已解决</span>
+                {!isMobile && <span className="text-xs text-zinc-400">显示已解决</span>}
               </label>
               <button
                 onClick={clearProblems}
                 className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors text-red-500 hover:bg-red-500/10"
               >
                 <Trash2 size={12} />
-                清空问题
+                {!isMobile && '清空问题'}
               </button>
             </div>
           )}
@@ -392,8 +411,8 @@ export const TerminalPanel: React.FC = () => {
           <div className="space-y-0.5 font-mono text-xs">
             {filteredLogs.length === 0 ? (
               <div className="text-center py-8 text-zinc-500">
-                <ScrollText size={32} className="mx-auto mb-2 opacity-30" />
-                <p>暂无日志记录</p>
+                <ScrollText size={24} className="mx-auto mb-2 opacity-30" />
+                <p className="text-sm">暂无日志记录</p>
               </div>
             ) : (
               filteredLogs.map((log) => (
@@ -431,14 +450,14 @@ export const TerminalPanel: React.FC = () => {
           <div className="space-y-3">
             {filteredOutputs.length === 0 ? (
               <div className="text-center py-8 text-zinc-500">
-                <Cpu size={32} className="mx-auto mb-2 opacity-30" />
-                <p>暂无生成记录</p>
+                <Cpu size={24} className="mx-auto mb-2 opacity-30" />
+                <p className="text-sm">暂无生成记录</p>
               </div>
             ) : (
               filteredOutputs.map((output) => (
                 <div
                   key={output.id}
-                  className="rounded-lg border overflow-hidden bg-white/5 border-white/10"
+                  className="rounded-lg border overflow-hidden bg-zinc-700/30 border-white/10"
                 >
                   <div
                     className="flex items-center justify-between p-3 cursor-pointer hover:bg-white/5"
@@ -482,8 +501,8 @@ export const TerminalPanel: React.FC = () => {
                   </div>
 
                   {expandedOutput === output.id && output.content && (
-                    <div className="px-3 pb-3 border-t border-white/5 bg-black/20">
-                      <pre className="text-xs whitespace-pre-wrap mt-2 p-2 rounded bg-black/20">
+                    <div className="px-3 pb-3 border-t border-white/5 bg-zinc-800/30">
+                      <pre className="text-xs whitespace-pre-wrap mt-2 p-2 rounded bg-zinc-700/30">
                         {output.content.substring(0, 500)}
                         {output.content.length > 500 && '...'}
                       </pre>
@@ -499,12 +518,12 @@ export const TerminalPanel: React.FC = () => {
           <div className="space-y-2">
             {filteredProblems.length === 0 ? (
               <div className="text-center py-8 text-zinc-500">
-                <CheckCircle2 size={32} className="mx-auto mb-2 text-green-500 opacity-50" />
-                <p>没有发现小说问题</p>
+                <CheckCircle2 size={24} className="mx-auto mb-2 text-green-500 opacity-50" />
+                <p className="text-sm">没有发现小说问题</p>
               </div>
             ) : (
               <>
-                <div className="flex items-center gap-4 mb-4 p-3 rounded-lg bg-white/5">
+                <div className="flex items-center gap-4 mb-4 p-3 rounded-lg bg-zinc-700/30">
                   <div className="text-center">
                     <div className="text-lg font-bold text-red-500">
                       {problemStats.bySeverity.critical || 0}
@@ -538,7 +557,7 @@ export const TerminalPanel: React.FC = () => {
                       'rounded-lg border p-4',
                       problem.isResolved
                         ? 'bg-green-500/5 border-green-500/20'
-                        : 'bg-white/5 border-white/10'
+                        : 'bg-zinc-700/30 border-white/10'
                     )}
                   >
                     <div className="flex items-start gap-3">

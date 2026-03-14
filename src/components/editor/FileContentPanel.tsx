@@ -1,5 +1,5 @@
 import React from 'react';
-import { FileText, Edit3, Eye, FolderOpen } from 'lucide-react';
+import { FileText, Edit3, Eye, FolderOpen, X } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { FileNode } from '@/types';
 
@@ -12,6 +12,7 @@ interface FileContentPanelProps {
   onBackToFileList?: () => void;
   onToggleEditMode: () => void;
   onContentChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+  onClose?: () => void;
 }
 
 export function FileContentPanel({
@@ -23,6 +24,7 @@ export function FileContentPanel({
   onBackToFileList,
   onToggleEditMode,
   onContentChange,
+  onClose,
 }: FileContentPanelProps) {
   if (showFileContent && activeFile) {
     return (
@@ -53,6 +55,15 @@ export function FileContentPanel({
             >
               {isEditMode ? <Eye size={16} /> : <Edit3 size={16} />}
             </button>
+            {onClose && (
+              <button
+                onClick={onClose}
+                className="p-1.5 rounded transition-colors hover:bg-white/10 text-zinc-400 hover:text-red-400"
+                title="关闭"
+              >
+                <X size={16} />
+              </button>
+            )}
           </div>
         </div>
 

@@ -1,6 +1,9 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { AgentConfig } from '@/types';
+import { SimpleAgentConfig } from '@/types';
+
+export const DEFAULT_AGENT_MAX_ITERATIONS = 8;
+export const MIN_AGENT_MAX_ITERATIONS = 3;
 
 export interface AgentCurrentAction {
   type: 'editing' | 'reading' | 'analyzing' | 'generating' | 'idle';
@@ -12,14 +15,14 @@ export interface AgentCurrentAction {
 }
 
 interface AgentState {
-  agentConfig: AgentConfig;
+  agentConfig: SimpleAgentConfig;
   isProcessing: boolean;
   currentAction: AgentCurrentAction;
 }
 
 interface AgentActions {
-  updateAgentConfig: (config: Partial<AgentConfig>) => void;
-  setAgentConfig: (config: AgentConfig) => void;
+  updateAgentConfig: (config: Partial<SimpleAgentConfig>) => void;
+  setAgentConfig: (config: SimpleAgentConfig) => void;
   setProcessing: (processing: boolean) => void;
   setCurrentAction: (action: Partial<AgentCurrentAction>) => void;
   clearCurrentAction: () => void;
@@ -27,9 +30,9 @@ interface AgentActions {
 
 type AgentStore = AgentState & AgentActions;
 
-const initialAgentConfig: AgentConfig = {
+const initialAgentConfig: SimpleAgentConfig = {
   enabled: false,
-  maxIterations: 1,
+  maxIterations: DEFAULT_AGENT_MAX_ITERATIONS,
 };
 
 const initialCurrentAction: AgentCurrentAction = {

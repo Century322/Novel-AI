@@ -43,9 +43,9 @@ export async function encryptValue(plaintext: string): Promise<string> {
     combined.set(new Uint8Array(encrypted), iv.length);
 
     return btoa(String.fromCharCode(...combined));
-  } catch {
-    logger.warn('加密失败，将以明文存储');
-    return plaintext;
+  } catch (error) {
+    logger.error('加密失败', { error });
+    throw new Error('加密失败，无法安全存储数据');
   }
 }
 

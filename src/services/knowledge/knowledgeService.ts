@@ -123,15 +123,15 @@ export class KnowledgeService {
 
   private chunkContent(content: string, chunkSize: number, overlap: number): string[] {
     const chunks: string[] = [];
-    const paragraphs = content.split(/\n\n+/);
+    const paragraphs = content.split(/\n+/);
     let currentChunk = '';
 
     for (const paragraph of paragraphs) {
       if (currentChunk.length + paragraph.length > chunkSize && currentChunk.length > 0) {
         chunks.push(currentChunk.trim());
-        currentChunk = currentChunk.slice(-overlap) + '\n\n' + paragraph;
+        currentChunk = currentChunk.slice(-overlap) + '\n' + paragraph;
       } else {
-        currentChunk += (currentChunk ? '\n\n' : '') + paragraph;
+        currentChunk += (currentChunk ? '\n' : '') + paragraph;
       }
     }
 

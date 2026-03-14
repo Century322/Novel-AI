@@ -1,11 +1,6 @@
-export type LLMProvider =
-  | 'openai'
-  | 'anthropic'
-  | 'deepseek'
-  | 'zhipu'
-  | 'moonshot'
-  | 'ollama'
-  | 'custom';
+import type { AIProvider } from './types';
+
+export type LLMProvider = AIProvider;
 
 export interface LLMConfig {
   provider: LLMProvider;
@@ -53,14 +48,21 @@ export interface StreamChunk {
   delta: string;
 }
 
-export const PROVIDER_CONFIGS: Record<
-  LLMProvider,
-  {
-    name: string;
-    defaultBaseUrl: string;
-    models: string[];
-  }
+export const PROVIDER_CONFIGS: Partial<
+  Record<
+    LLMProvider,
+    {
+      name: string;
+      defaultBaseUrl: string;
+      models: string[];
+    }
+  >
 > = {
+  gateway: {
+    name: 'Vercel AI Gateway',
+    defaultBaseUrl: 'https://gateway.ai.vercel.com/v1',
+    models: [],
+  },
   openai: {
     name: 'OpenAI',
     defaultBaseUrl: 'https://api.openai.com/v1',
@@ -71,29 +73,49 @@ export const PROVIDER_CONFIGS: Record<
     defaultBaseUrl: 'https://api.anthropic.com/v1',
     models: ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229', 'claude-3-haiku-20240307'],
   },
+  google: {
+    name: 'Google (Gemini)',
+    defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1',
+    models: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'],
+  },
+  alibaba: {
+    name: 'Alibaba (Qwen)',
+    defaultBaseUrl: 'https://dashscope.aliyuncs.com/api/v1',
+    models: ['qwen-3-30b', 'qwen-3-235b', 'qwen-3-14b'],
+  },
+  bytedance: {
+    name: 'ByteDance (Seed)',
+    defaultBaseUrl: 'https://api.bytedance.com/v1',
+    models: ['seed-1.6', 'seed-1.8'],
+  },
   deepseek: {
     name: 'DeepSeek',
     defaultBaseUrl: 'https://api.deepseek.com/v1',
-    models: ['deepseek-chat', 'deepseek-coder'],
+    models: ['deepseek-chat', 'deepseek-coder', 'deepseek-v3'],
   },
-  zhipu: {
-    name: '智谱 AI',
-    defaultBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
-    models: ['glm-4', 'glm-4-flash', 'glm-3-turbo'],
+  minimax: {
+    name: 'MiniMax',
+    defaultBaseUrl: 'https://api.minimax.chat/v1',
+    models: ['minimax-m2.5', 'minimax-m2.1', 'minimax-m2'],
   },
   moonshot: {
     name: 'Moonshot',
     defaultBaseUrl: 'https://api.moonshot.cn/v1',
     models: ['moonshot-v1-8k', 'moonshot-v1-32k', 'moonshot-v1-128k'],
   },
-  ollama: {
-    name: 'Ollama (本地)',
-    defaultBaseUrl: 'http://localhost:11434/v1',
-    models: ['llama3', 'qwen2', 'mistral'],
+  vercel: {
+    name: 'Vercel (V0)',
+    defaultBaseUrl: 'https://api.vercel.ai/v1',
+    models: ['v0-1.5-md', 'v0-1.0-md'],
   },
-  custom: {
-    name: '自定义',
-    defaultBaseUrl: '',
-    models: [],
+  xai: {
+    name: 'xAI (Grok)',
+    defaultBaseUrl: 'https://api.x.ai/v1',
+    models: ['grok-4', 'grok-3', 'grok-3-fast'],
+  },
+  zai: {
+    name: 'Z.AI (GLM)',
+    defaultBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    models: ['glm-5', 'glm-4.7', 'glm-4.6'],
   },
 };

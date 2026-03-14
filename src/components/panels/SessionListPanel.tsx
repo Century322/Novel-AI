@@ -3,8 +3,62 @@ import { useSessionStore, useWorkshopStore, useSkillStore } from '@/store';
 import { Plus, Trash2, Settings, Sparkles, BookOpen, Brain, BarChart3, ChevronDown, ChevronRight, Upload, X, Play, Terminal, Search, PanelLeftClose } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useKnowledgeService } from '@/hooks/useSystemContext';
-import { MemoryType } from '@/types/core/workshop';
+import { WorkshopMemoryType } from '@/types/core/workshop';
 import { LongPressMenu } from '@/components/ui/LongPressMenu';
+import { logger } from '@/services/core/loggerService';
+
+function detectGBK(data: Uint8Array): boolean {
+  let utf8Valid = true;
+  let i = 0;
+  const len = Math.min(data.length, 10000);
+  
+  while (i < len) {
+    const byte = data[i];
+    
+    if (byte <= 0x7f) {
+      i++;
+      continue;
+    }
+    
+    if ((byte & 0xe0) === 0xc0) {
+      if (i + 1 >= len || (data[i + 1] & 0xc0) !== 0x80) {
+        utf8Valid = false;
+        break;
+      }
+      i += 2;
+    } else if ((byte & 0xf0) === 0xe0) {
+      if (i + 2 >= len || (data[i + 1] & 0xc0) !== 0x80 || (data[i + 2] & 0xc0) !== 0x80) {
+        utf8Valid = false;
+        break;
+      }
+      i += 3;
+    } else if ((byte & 0xf8) === 0xf0) {
+      if (i + 3 >= len || (data[i + 1] & 0xc0) !== 0x80 || (data[i + 2] & 0xc0) !== 0x80 || (data[i + 3] & 0xc0) !== 0x80) {
+        utf8Valid = false;
+        break;
+      }
+      i += 4;
+    } else {
+      utf8Valid = false;
+      break;
+    }
+  }
+  
+  if (utf8Valid) {
+    return false;
+  }
+  
+  for (i = 0; i < len - 1; i++) {
+    const b1 = data[i];
+    const b2 = data[i + 1];
+    
+    if (b1 >= 0x81 && b1 <= 0xfe && b2 >= 0x40 && b2 <= 0xfe && b2 !== 0x7f) {
+      return true;
+    }
+  }
+  
+  return false;
+}
 
 interface SessionListPanelProps {
   isOpen: boolean;
@@ -87,7 +141,7 @@ export const SessionListPanel: React.FC<SessionListPanelProps> = ({ isOpen, onOp
   
   const [showAddMemory, setShowAddMemory] = useState(false);
   const [newMemoryContent, setNewMemoryContent] = useState('');
-  const [newMemoryType, setNewMemoryType] = useState<MemoryType>('character');
+  const [newMemoryType, setNewMemoryType] = useState<WorkshopMemoryType>('character');
   
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   
@@ -114,15 +168,27 @@ export const SessionListPanel: React.FC<SessionListPanelProps> = ({ isOpen, onOp
 
     for (const file of Array.from(files)) {
       try {
-        const content = await file.text();
+        const buffer = await file.arrayBuffer();
+        const uint8Array = new Uint8Array(buffer);
+        
+        let content: string;
+        const isGBK = detectGBK(uint8Array);
+        
+        if (isGBK) {
+          const gbkDecoder = new TextDecoder('gbk');
+          content = gbkDecoder.decode(uint8Array);
+        } else {
+          content = new TextDecoder('utf-8').decode(uint8Array);
+        }
+        
         if (knowledgeService) {
           const result = await knowledgeService.addFile(file.name, 'reference', content);
           if (result) {
-            console.log('上传成功:', result.filename, '分块数:', result.chunkCount);
+            logger.info('上传成功', { filename: result.filename, chunkCount: result.chunkCount, encoding: isGBK ? 'GBK' : 'UTF-8' });
           }
         }
       } catch (err) {
-        console.error('上传文件失败:', err);
+        logger.error('上传文件失败', { error: err });
       }
     }
     
@@ -324,7 +390,30 @@ export const SessionListPanel: React.FC<SessionListPanelProps> = ({ isOpen, onOp
                   title={file.filename}
                 >
                   <span className="truncate flex-1">{file.filename}</span>
-                  <span className="text-zinc-600 ml-1">({file.chunkCount}块)</span>
+                  <div className="flex items-center gap-1">
+                    <span className="text-zinc-600">({file.chunkCount}块)</span>
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        try {
+                          if (knowledgeService) {
+                            const success = await knowledgeService.removeFile(file.id);
+                            if (success) {
+                              logger.info('删除资料成功', { filename: file.filename });
+                              refreshKnowledgeIndex();
+                            } else {
+                              logger.warn('删除资料失败', { fileId: file.id });
+                            }
+                          }
+                        } catch (err) {
+                          logger.error('删除资料异常', { error: err, fileId: file.id });
+                        }
+                      }}
+                      className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-400 transition-opacity"
+                    >
+                      <X size={isMobile ? 14 : 10} />
+                    </button>
+                  </div>
                 </div>
               ));
             })()}
@@ -372,11 +461,18 @@ export const SessionListPanel: React.FC<SessionListPanelProps> = ({ isOpen, onOp
                   <button
                     onClick={async (e) => {
                       e.stopPropagation();
-                      await deleteMemoryEntry(entry.id);
+                      try {
+                        const success = await deleteMemoryEntry(entry.id);
+                        if (!success) {
+                          logger.warn('删除记忆失败', { id: entry.id });
+                        }
+                      } catch (err) {
+                        logger.error('删除记忆异常', { error: err, id: entry.id });
+                      }
                     }}
-                    className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-red-400"
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-400 transition-opacity"
                   >
-                    <X size={isMobile ? 14 : 8} />
+                    <X size={isMobile ? 14 : 10} />
                   </button>
                 </div>
               ))
@@ -486,7 +582,7 @@ export const SessionListPanel: React.FC<SessionListPanelProps> = ({ isOpen, onOp
                 <label className={cn("text-zinc-400 mb-1 block", isMobile ? "text-sm" : "text-xs")}>模板类型</label>
                 <select
                   value={newSkillCategory}
-                  onChange={(e) => setNewSkillCategory(e.target.value as any)}
+                  onChange={(e) => setNewSkillCategory(e.target.value as 'style' | 'structure' | 'setting' | 'technique' | 'workflow' | 'review' | 'analysis' | 'custom')}
                   className={cn("w-full px-2 py-1.5 rounded border border-zinc-700 bg-zinc-800 text-zinc-200", isMobile ? "text-sm" : "text-xs")}
                 >
                   <option value="style">风格</option>
@@ -545,7 +641,7 @@ export const SessionListPanel: React.FC<SessionListPanelProps> = ({ isOpen, onOp
                 <label className={cn("text-zinc-400 mb-1 block", isMobile ? "text-sm" : "text-xs")}>记忆类型</label>
                 <select
                   value={newMemoryType}
-                  onChange={(e) => setNewMemoryType(e.target.value as MemoryType)}
+                  onChange={(e) => setNewMemoryType(e.target.value as WorkshopMemoryType)}
                   className={cn("w-full px-2 py-1.5 rounded border border-zinc-700 bg-zinc-800 text-zinc-200", isMobile ? "text-sm" : "text-xs")}
                 >
                   <option value="character">人物</option>

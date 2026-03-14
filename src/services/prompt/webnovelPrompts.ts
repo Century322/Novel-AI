@@ -180,18 +180,18 @@ export const SCENE_TEMPLATES = {
   },
 };
 
-export type SceneType = keyof typeof SCENE_TEMPLATES;
+export type WebnovelSceneType = keyof typeof SCENE_TEMPLATES;
 
-export function getSceneTemplate(sceneType: SceneType): string {
+export function getSceneTemplate(sceneType: WebnovelSceneType): string {
   return SCENE_TEMPLATES[sceneType]?.prompt || '';
 }
 
-export function getSceneTemplateName(sceneType: SceneType): string {
+export function getSceneTemplateName(sceneType: WebnovelSceneType): string {
   return SCENE_TEMPLATES[sceneType]?.name || '';
 }
 
-export function detectSceneType(content: string): SceneType {
-  const keywords: Record<SceneType, string[]> = {
+export function detectSceneType(content: string): WebnovelSceneType {
+  const keywords: Record<WebnovelSceneType, string[]> = {
     combat: ['战斗', '攻击', '招式', '剑', '拳', '杀', '血', '对决', '交锋'],
     romance: ['心跳', '脸红', '喜欢', '爱', '温柔', '拥抱', '吻', '暧昧'],
     daily: ['日常', '轻松', '聊天', '吃饭', '睡觉', '逛街', '朋友'],
@@ -200,7 +200,7 @@ export function detectSceneType(content: string): SceneType {
   };
 
   let maxScore = 0;
-  let detectedType: SceneType = 'daily';
+  let detectedType: WebnovelSceneType = 'daily';
 
   for (const [type, words] of Object.entries(keywords)) {
     let score = 0;
@@ -211,14 +211,14 @@ export function detectSceneType(content: string): SceneType {
     }
     if (score > maxScore) {
       maxScore = score;
-      detectedType = type as SceneType;
+      detectedType = type as WebnovelSceneType;
     }
   }
 
   return detectedType;
 }
 
-export function buildWebnovelPrompt(sceneType?: SceneType, context?: string): string {
+export function buildWebnovelPrompt(sceneType?: WebnovelSceneType, context?: string): string {
   const parts: string[] = [WEBNOVEL_SYSTEM_PROMPT];
 
   if (sceneType) {
